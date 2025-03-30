@@ -62,8 +62,8 @@ def gauss_newton_state_estimation_real(P_meas, Q_meas, Ybus, slack_bus, tol, max
         delta_x = np.linalg.lstsq(J.T @ J, J.T @ delta_y, rcond=None)[0]
 
         # Update state variables with step size factors
-        step_size1 = 0.25
-        step_size2 = 0.25
+        step_size1 = 0.225
+        step_size2 = 0.225
         theta[non_slack] += step_size1 * delta_x[:len(non_slack)]
         V[non_slack] += step_size2 * delta_x[len(non_slack):]
 

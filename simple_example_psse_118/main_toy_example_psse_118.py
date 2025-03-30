@@ -5,9 +5,10 @@ from compute_power_flow import compute_power_flow
 from gauss_newton_state_estimation_linesearch import gauss_newton_state_estimation_linesearch
 from gauss_newton_state_estimation_real import gauss_newton_state_estimation_real
 from generate_Ybus import generate_Ybus
+from H_AC_matrix import H_AC_matrix
 
 # Load IEEE 118-bus data
-data = loadmat('ieee118_186.mat')  # Ensure this file contains 'data.system.line'
+data = loadmat('simple_example_psse_118/ieee118_186.mat')  # Ensure this file contains 'data.system.line'
 
 data['data'] = {n: data['data'][n][0, 0] for n in data['data'].dtype.names}
 data['data']['system'] = {n: data['data']['system'][n][0, 0] for n in data['data']['system'].dtype.names}
@@ -29,6 +30,7 @@ V_true = 1 + 0.05 * (np.random.rand(n) - 0.5)
 
 # Compute true power injections
 P_meas, Q_meas = compute_power_flow(theta_true, V_true, np.real(Ybus), np.imag(Ybus))
+# P_meas, Q_meas = H_AC_matrix(np.concatenate([theta_true, V_true]), Ybus)
 
 # Add measurement noise
 P_meas += 0.01 * np.random.randn(*P_meas.shape)
@@ -44,6 +46,6 @@ theta_est2, V_est2 = gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Yb
 
 # Display results
 print('Estimated Voltage Angles (radians):')
-print(theta_est)
+print(theta_est2)
 print('Estimated Voltage Magnitudes (p.u.):')
-print(V_est)
+print(V_est2)

@@ -23,30 +23,28 @@ def compute_jacobian(theta, V, G, B, non_slack):
     """
     n = len(V)
 
-    # Compute angle differences
-    Theta_diff = theta[:, np.newaxis] - theta[np.newaxis, :]
+    theta_diff = theta[:, np.newaxis] - theta[np.newaxis, :]
 
-    # Compute Jacobian blocks
-    H = -B * (V[:, np.newaxis] * V[np.newaxis, :]) * np.cos(Theta_diff) + \
-        G * (V[:, np.newaxis] * V[np.newaxis, :]) * np.sin(Theta_diff)
-    N = G * (V[:, np.newaxis] * V[np.newaxis, :]) * np.cos(Theta_diff) + \
-        B * (V[:, np.newaxis] * V[np.newaxis, :]) * np.sin(Theta_diff)
-    M = -H
-    L = N
+    V_outer = V[:, np.newaxis] * V[np.newaxis, :]
+    J11 = V_outer * (G * np.sin(theta_diff) - B * np.cos(theta_diff))
+    J12 = V[:, np.newaxis] * (G * np.cos(theta_diff) + B * np.sin(theta_diff))
+    J21 = V_outer * (G * -np.cos(theta_diff) + B * -np.sin(theta_diff))
+    J22 = V[:, np.newaxis] * (G * np.sin(theta_diff) - B * np.cos(theta_diff))
 
-    # Adjust diagonal elements
-    H -= np.diag(H.sum(axis=1) - np.diag(H))
-    N += np.diag(N.sum(axis=1) - np.diag(N))
-    M += np.diag(M.sum(axis=1) - np.diag(M))
-    L -= np.diag(L.sum(axis=1) - np.diag(L))
+    np.fill_diagonal(J11, np.sum(-J11, axis=1) + J11.diagonal())
+    np.fill_diagonal(J12, np.sum(V[np.newaxis, :] * (G * np.cos(theta_diff) + B * np.sin(theta_diff)), axis=1))
+    np.fill_diagonal(J21, np.sum(-J21, axis=1) + J21.diagonal())
+    np.fill_diagonal(J22, np.sum(V[np.newaxis, :] * (G * np.sin(theta_diff) - B * np.cos(theta_diff)), axis=1))
 
-    # Remove slack bus rows/columns
-    H = H[np.ix_(non_slack, non_slack)]
-    N = N[np.ix_(non_slack, non_slack)]
-    M = M[np.ix_(non_slack, non_slack)]
-    L = L[np.ix_(non_slack, non_slack)]
+    J12 += np.diag(3 * V * G.diagonal())
+    J22 += np.diag(-3 * V * B.diagonal())
 
-    # Construct full Jacobian
-    J = np.block([[H, N], [M, L]])
+
+    J11 = J11[np.ix_(non_slack, non_slack)]
+    J12 = J12[np.ix_(non_slack, non_slack)]
+    J21 = J21[np.ix_(non_slack, non_slack)]
+    J22 = J22[np.ix_(non_slack, non_slack)]
+
+    J = np.block([[J11, J12], [J21, J22]])
 
     return J

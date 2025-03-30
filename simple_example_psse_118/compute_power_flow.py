@@ -28,7 +28,7 @@ def compute_power_flow(theta, V, G, B):
     Theta_diff = theta[:, np.newaxis] - theta[np.newaxis, :]
 
     # Compute power injections using vectorized matrix form
-    P = V * np.sum(V[np.newaxis, :] * (G * np.cos(Theta_diff) + B * np.sin(Theta_diff)), axis=1)
+    P = V * np.sum(V[np.newaxis, :] * ((G * np.cos(Theta_diff)) + (B * np.sin(Theta_diff))), axis=1)
     Q = V * np.sum(V[np.newaxis, :] * (G * np.sin(Theta_diff) - B * np.cos(Theta_diff)), axis=1)
 
     return P, Q

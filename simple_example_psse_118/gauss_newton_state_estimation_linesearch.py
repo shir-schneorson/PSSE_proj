@@ -2,6 +2,7 @@ import numpy as np
 
 from compute_jaccobian import compute_jacobian
 from compute_power_flow import compute_power_flow
+from H_AC_matrix import H_AC_matrix
 
 
 def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, tol, max_iter):
@@ -49,6 +50,7 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
     for _ in range(max_iter):
         # Compute power injections
         P_est, Q_est = compute_power_flow(theta, V, G, B)
+        # P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
 
         # Compute residuals
         delta_P = P_meas - P_est
@@ -60,6 +62,7 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
 
         # Solve for state update using least squares
         delta_x = np.linalg.lstsq(J.T @ J, J.T @ delta_y, rcond=None)[0]
+        # delta_x = np.linalg.pinv(J) @ delta_y
 
         # **Backtracking Line Search for Step Size**
         alpha = 1.0  # Initial step size
@@ -80,6 +83,7 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
 
             # Compute power injections for new state
             P_new, Q_new = compute_power_flow(theta_temp, V_temp, G, B)
+            # P_new, Q_new = H_AC_matrix(np.concatenate([theta_temp, V_temp]), Ybus)
             delta_P_new = P_meas - P_new
             delta_Q_new = Q_meas - Q_new
             delta_y_new = np.concatenate((delta_P_new[non_slack], delta_Q_new[non_slack]))
@@ -99,6 +103,7 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
 
         # Check convergence
         if np.linalg.norm(delta_x) < tol:
+            print('converged')
             break
 
     return theta, V
