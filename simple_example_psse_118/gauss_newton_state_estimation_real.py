@@ -2,6 +2,7 @@ import numpy as np
 
 from compute_jaccobian import compute_jacobian
 from compute_power_flow import compute_power_flow
+from simple_example_psse_118.H_AC_matrix import H_AC_matrix
 
 
 def gauss_newton_state_estimation_real(P_meas, Q_meas, Ybus, slack_bus, tol, max_iter):
@@ -48,7 +49,8 @@ def gauss_newton_state_estimation_real(P_meas, Q_meas, Ybus, slack_bus, tol, max
     # Iterative Gauss-Newton updates
     for _ in range(max_iter):
         # Compute power injections
-        P_est, Q_est = compute_power_flow(theta, V, G, B)
+        # P_est, Q_est = compute_power_flow(theta, V, G, B)
+        P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
 
         # Compute residuals
         delta_P = P_meas - P_est

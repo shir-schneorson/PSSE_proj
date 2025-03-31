@@ -49,8 +49,8 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
     # Iterative Gauss-Newton updates
     for _ in range(max_iter):
         # Compute power injections
-        P_est, Q_est = compute_power_flow(theta, V, G, B)
-        # P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
+        # P_est, Q_est = compute_power_flow(theta, V, G, B)
+        P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
 
         # Compute residuals
         delta_P = P_meas - P_est
@@ -62,7 +62,6 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
 
         # Solve for state update using least squares
         delta_x = np.linalg.lstsq(J.T @ J, J.T @ delta_y, rcond=None)[0]
-        # delta_x = np.linalg.pinv(J) @ delta_y
 
         # **Backtracking Line Search for Step Size**
         alpha = 1.0  # Initial step size
@@ -82,8 +81,8 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
             V_temp[non_slack] += alpha * delta_x[len(non_slack):]
 
             # Compute power injections for new state
-            P_new, Q_new = compute_power_flow(theta_temp, V_temp, G, B)
-            # P_new, Q_new = H_AC_matrix(np.concatenate([theta_temp, V_temp]), Ybus)
+            # P_new, Q_new = compute_power_flow(theta_temp, V_temp, G, B)
+            P_new, Q_new = H_AC_matrix(np.concatenate([theta_temp, V_temp]), Ybus)
             delta_P_new = P_meas - P_new
             delta_Q_new = Q_meas - Q_new
             delta_y_new = np.concatenate((delta_P_new[non_slack], delta_Q_new[non_slack]))

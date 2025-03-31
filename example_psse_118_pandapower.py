@@ -40,6 +40,13 @@ pp.estimation.estimate(ieee118_net)
 
 # Display results
 theta_est, V_est = ieee118_net['res_bus_est'].loc[:, ['va_degree', 'vm_pu']].values.T
+theta_true, V_true = ieee118_net['res_bus'].loc[:, ['va_degree', 'vm_pu']].values.T
+
+print('**Errors**')
+print(f'Voltage error WLS pandapower: {np.linalg.norm(V_est - V_true):.6f}')
+print(f'Theta (radians) error WLS pandapower: {np.linalg.norm(theta_est - theta_true):.6f}')
+print()
+
 print('Estimated Voltage Angles (radians):')
 print(np.deg2rad(theta_est))
 print('Estimated Voltage Magnitudes (p.u.):')

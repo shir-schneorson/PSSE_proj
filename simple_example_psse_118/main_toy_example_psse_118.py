@@ -29,8 +29,8 @@ theta_true -= theta_true[slack_bus]  # Set slack bus angle to 0
 V_true = 1 + 0.05 * (np.random.rand(n) - 0.5)
 
 # Compute true power injections
-P_meas, Q_meas = compute_power_flow(theta_true, V_true, np.real(Ybus), np.imag(Ybus))
-# P_meas, Q_meas = H_AC_matrix(np.concatenate([theta_true, V_true]), Ybus)
+# P_meas, Q_meas = compute_power_flow(theta_true, V_true, np.real(Ybus), np.imag(Ybus))
+P_meas, Q_meas = H_AC_matrix(np.concatenate([theta_true, V_true]), Ybus)
 
 # Add measurement noise
 P_meas += 0.01 * np.random.randn(*P_meas.shape)
@@ -45,7 +45,19 @@ theta_est, V_est = gauss_newton_state_estimation_real(P_meas, Q_meas, Ybus, slac
 theta_est2, V_est2 = gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, tol, max_iter)
 
 # Display results
+print('**Errors**')
+print(f'Voltage error GN real: {np.linalg.norm(V_est - V_true):.6f}')
+print(f'Voltage error GN linesearch: {np.linalg.norm(V_est2 - V_true):.6f}')
+print(f'Theta (radians) error GN real: {np.linalg.norm(theta_est - theta_true):.6f}')
+print(f'Theta (radians) error GN linesearch: {np.linalg.norm(theta_est2 - theta_true):.6f}')
+print()
+
 print('Estimated Voltage Angles (radians):')
-print(theta_est2)
+print(f'GN real: {theta_est}')
+print(f'GN linesearch: {theta_est2}')
+print()
 print('Estimated Voltage Magnitudes (p.u.):')
-print(V_est2)
+print(f'GN real: {V_est}')
+print(f'GN linesearch: {V_est2}')
+
+
