@@ -1,11 +1,11 @@
 import numpy as np
 
-from compute_jaccobian import compute_jacobian
-from compute_power_flow import compute_power_flow
-from H_AC_matrix import H_AC_matrix
+from simple_example_psse_118.compute_jaccobian import compute_jacobian
+from simple_example_psse_118.compute_power_flow import compute_power_flow
+from simple_example_psse_118.H_AC_matrix import H_AC_matrix
 
 
-def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, tol, max_iter):
+def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, tol, max_iter, x0=None):
     """
     Gauss-Newton method for AC state estimation with backtracking line search.
 
@@ -32,12 +32,15 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
     n = len(Ybus)
 
     # Initial guess: Flat start (V=1 p.u., θ=0)
-    theta = np.zeros(n)
-    V = np.ones(n)
+    if x0 is None:
+        theta = np.zeros(n)
+        V = np.ones(n)
 
-    # Fix slack bus values
-    theta[slack_bus] = 0
-    V[slack_bus] = 1
+        # Fix slack bus values
+        theta[slack_bus] = 0
+        V[slack_bus] = 1
+    else:
+        theta, V = x0
 
     # Extract Ybus components
     G = np.real(Ybus)
@@ -49,13 +52,14 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
     # Iterative Gauss-Newton updates
     for _ in range(max_iter):
         # Compute power injections
-        # P_est, Q_est = compute_power_flow(theta, V, G, B)
-        P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
+        P_est, Q_est = compute_power_flow(theta, V, G, B)
+        # P_est, Q_est = H_AC_matrix(np.concatenate([theta, V]), Ybus)
 
         # Compute residuals
         delta_P = P_meas - P_est
         delta_Q = Q_meas - Q_est
-        delta_y = np.concatenate((delta_P[non_slack], delta_Q[non_slack]))
+        # delta_y = np.concatenate((delta_P[non_slack], delta_Q[non_slack]))
+        delta_y = np.concatenate((delta_P, delta_Q))
 
         # Compute Jacobian
         J = compute_jacobian(theta, V, G, B, non_slack)
@@ -66,7 +70,7 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
         # **Backtracking Line Search for Step Size**
         alpha = 1.0  # Initial step size
         beta = 0.5  # Step size reduction factor
-        c = 0.1  # Sufficient decrease condition factor
+        c = 0.2  # Sufficient decrease condition factor
         max_ls_iter = 10  # Max iterations for line search
 
         # Compute initial cost function (mismatch norm)
@@ -77,15 +81,18 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
             # Compute tentative updates
             theta_temp = theta.copy()
             V_temp = V.copy()
+            # theta_temp[non_slack] += alpha * delta_x[:len(non_slack)]
+            # V_temp[non_slack] += alpha * delta_x[len(non_slack):]
             theta_temp[non_slack] += alpha * delta_x[:len(non_slack)]
-            V_temp[non_slack] += alpha * delta_x[len(non_slack):]
+            V_temp += alpha * delta_x[len(non_slack):]
 
             # Compute power injections for new state
-            # P_new, Q_new = compute_power_flow(theta_temp, V_temp, G, B)
-            P_new, Q_new = H_AC_matrix(np.concatenate([theta_temp, V_temp]), Ybus)
+            P_new, Q_new = compute_power_flow(theta_temp, V_temp, G, B)
+            # P_new, Q_new = H_AC_matrix(np.concatenate([theta_temp, V_temp]), Ybus)
             delta_P_new = P_meas - P_new
             delta_Q_new = Q_meas - Q_new
-            delta_y_new = np.concatenate((delta_P_new[non_slack], delta_Q_new[non_slack]))
+            # delta_y_new = np.concatenate((delta_P_new[non_slack], delta_Q_new[non_slack]))
+            delta_y_new = np.concatenate((delta_P_new, delta_Q_new))
 
             # Compute new cost function (mismatch norm)
             norm_f_new = np.linalg.norm(delta_y_new)
@@ -97,12 +104,14 @@ def gauss_newton_state_estimation_linesearch(P_meas, Q_meas, Ybus, slack_bus, to
                 alpha *= beta  # Reduce step size
 
         # Apply update with optimal step size
+        # theta[non_slack] += alpha * delta_x[:len(non_slack)]
+        # V[non_slack] += alpha * delta_x[len(non_slack):]
         theta[non_slack] += alpha * delta_x[:len(non_slack)]
-        V[non_slack] += alpha * delta_x[len(non_slack):]
+        V += alpha * delta_x[len(non_slack):]
 
         # Check convergence
         if np.linalg.norm(delta_x) < tol:
             print('converged')
             break
 
-    return theta, V
+    return theta, V, np.linalg.norm(delta_x)

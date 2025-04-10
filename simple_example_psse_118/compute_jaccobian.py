@@ -21,29 +21,28 @@ def compute_jacobian(theta, V, G, B, non_slack):
     J : ndarray
         Jacobian matrix.
     """
-    n = len(V)
+    V_T, theta = V[None, :], theta[:, None]
 
-    theta_diff = theta[:, np.newaxis] - theta[np.newaxis, :]
+    theta_diff = theta - theta.T
+    V_outer = V_T.T @ V_T
 
-    V_outer = V[:, np.newaxis] * V[np.newaxis, :]
-    J11 = V_outer * (G * np.sin(theta_diff) - B * np.cos(theta_diff))
-    J12 = V[:, np.newaxis] * (G * np.cos(theta_diff) + B * np.sin(theta_diff))
-    J21 = V_outer * (G * -np.cos(theta_diff) + B * -np.sin(theta_diff))
-    J22 = V[:, np.newaxis] * (G * np.sin(theta_diff) - B * np.cos(theta_diff))
+    G_sin_theta, G_cos_theta = G * np.sin(theta_diff), G * np.cos(theta_diff)
+    B_sin_theta, B_cos_theta = B * np.sin(theta_diff), B * np.cos(theta_diff)
 
-    np.fill_diagonal(J11, np.sum(-J11, axis=1) + J11.diagonal())
-    np.fill_diagonal(J12, np.sum(V[np.newaxis, :] * (G * np.cos(theta_diff) + B * np.sin(theta_diff)), axis=1))
-    np.fill_diagonal(J21, np.sum(-J21, axis=1) + J21.diagonal())
-    np.fill_diagonal(J22, np.sum(V[np.newaxis, :] * (G * np.sin(theta_diff) - B * np.cos(theta_diff)), axis=1))
+    dP_inj_dTheta = V_outer * (G_sin_theta - B_cos_theta)
+    dP_inj_dTheta -= np.diag(np.sum(dP_inj_dTheta, axis=1))
+    dP_inj_dV = V * (G_cos_theta + B_sin_theta)
+    dP_inj_dV += np.diag(np.sum(V_T * (G_cos_theta + B_sin_theta), axis=1))
 
-    J12 += np.diag(3 * V * G.diagonal())
-    J22 += np.diag(-3 * V * B.diagonal())
+    dQ_inj_dTheta = V_outer * (-G_cos_theta - B_sin_theta)
+    dQ_inj_dTheta -= np.diag(np.sum(dQ_inj_dTheta, axis=1))
+    dQ_inj_dV = V * (G_sin_theta - B_cos_theta)
+    dQ_inj_dV += np.diag(np.sum(V_T * (G_cos_theta + B_sin_theta), axis=1))
 
-
-    J11 = J11[np.ix_(non_slack, non_slack)]
-    J12 = J12[np.ix_(non_slack, non_slack)]
-    J21 = J21[np.ix_(non_slack, non_slack)]
-    J22 = J22[np.ix_(non_slack, non_slack)]
+    J11 = dP_inj_dTheta[:, non_slack]
+    J12 = dP_inj_dV
+    J21 = dQ_inj_dTheta[:, non_slack]
+    J22 = dQ_inj_dV
 
     J = np.block([[J11, J12], [J21, J22]])
 

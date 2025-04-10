@@ -1,7 +1,7 @@
 import numpy as np
 
 import pandapower as pp
-from pandapower.networks.power_system_test_cases import case118
+from pandapower.networks.power_system_test_cases import case118, case5
 
 
 # Load IEEE 118-bus data
@@ -44,7 +44,7 @@ theta_true, V_true = ieee118_net['res_bus'].loc[:, ['va_degree', 'vm_pu']].value
 
 print('**Errors**')
 print(f'Voltage error WLS pandapower: {np.linalg.norm(V_est - V_true):.6f}')
-print(f'Theta (radians) error WLS pandapower: {np.linalg.norm(theta_est - theta_true):.6f}')
+print(f'Theta (radians) error WLS pandapower: {np.linalg.norm(np.deg2rad(theta_est) - np.deg2rad(theta_true)):.6f}')
 print()
 
 print('Estimated Voltage Angles (radians):')
