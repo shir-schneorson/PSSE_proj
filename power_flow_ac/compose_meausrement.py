@@ -17,6 +17,8 @@ class Pi:
         self.Gij = np.real(Ybus[idx2])
         self.Bij = np.imag(Ybus[idx2])
 
+        self.Yii = Yii[self.bus, self.bus]
+        self.Ybu = Ybu
         self.Gii = np.real(Ybu[self.bus, self.bus])
         self.Bii = np.imag(Ybu[self.bus, self.bus])
 
@@ -45,6 +47,8 @@ class Qi:
         self.Gij = np.real(Ybus[idx2])
         self.Bij = np.imag(Ybus[idx2])
 
+        self.Yii = Yii[self.bus, self.bus]
+        self.Ybu = Ybu
         self.Gii = np.real(Ybu[self.bus, self.bus])
         self.Bii = np.imag(Ybu[self.bus, self.bus])
 
@@ -88,6 +92,8 @@ class Pf:
         self.j = bra.j[self.idx].astype(int)
         self.N = len(self.i)
 
+        self.yij = bra.yij[self.idx]
+        self.ysi = bra.ysi[self.idx]
         self.gij = bra.gij[self.idx]
         self.bij = bra.bij[self.idx]
         self.tgij = bra.tij[self.idx] ** 2 * self.gij
@@ -106,6 +112,8 @@ class Qf:
         self.j = bra.j[self.idx].astype(int)
         self.N = len(self.i)
 
+        self.yij = bra.yij[self.idx]
+        self.ysi = bra.ysi[self.idx]
         self.gij = bra.gij[self.idx]
         self.bij = bra.bij[self.idx]
         self.bsi = bra.bsi[self.idx]

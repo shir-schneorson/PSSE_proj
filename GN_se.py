@@ -9,12 +9,15 @@ def GN_se(z, v, slk_bus, h_ac, nb, tol, max_iter, x0=None):
         V = np.ones(nb)
     else:
         T = x0[:nb]
+        T[slk_bus[0]] = slk_bus[1]
         V = x0[nb:]
 
     x = np.r_[T, V]
     R = np.diag(1. / v)
+    eps = np.inf
+    converged = False
 
-    for _ in range(max_iter):
+    for iter in range(max_iter):
         z_est, J = h_ac.estimate(V, T)
         delta_z = z - z_est
         J = np.delete(J, slk_bus[0], axis=1)
@@ -29,7 +32,7 @@ def GN_se(z, v, slk_bus, h_ac, nb, tol, max_iter, x0=None):
         V = x[nb:]
 
         if eps <= tol:
-            print('converged')
+            converged = True
             break
 
-    return T, V, eps
+    return T, V, eps, iter, converged

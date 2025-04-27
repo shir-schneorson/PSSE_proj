@@ -95,11 +95,11 @@ def current_acse(V, T, c, nb):
     Fc = np.sqrt(c.A * Vi ** 2 + c.B * Vj ** 2 - 2 * Vi * Vj * Tc1)
 
     Tc2 = c.C * np.sin(U) + c.D * np.cos(U)
-    Iij_Ti = (Vi * Vj * Tc2) / Fc
+    Iij_Ti = (Vi * Vj * Tc2) / (Fc + 1e-7)
     Iij_Tj = -Iij_Ti
 
-    Iij_Vi = (-Vj * Tc1 + c.A * Vi) / Fc
-    Iij_Vj = (-Vi * Tc1 + c.B * Vj) / Fc
+    Iij_Vi = (-Vj * Tc1 + c.A * Vi) / (Fc + 1e-7)
+    Iij_Vj = (-Vi * Tc1 + c.B * Vj) / (Fc + 1e-7)
 
     J31 = coo_array((np.r_[Iij_Ti, Iij_Tj], [c.jci, c.jcj]), (c.N, nb)).toarray()
     J32 = coo_array((np.r_[Iij_Vi, Iij_Vj], [c.jci, c.jcj]), (c.N, nb)).toarray()

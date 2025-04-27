@@ -43,7 +43,6 @@ def process_bus_data(bus_data, generator_data, base_MVA):
 
     nb = len(bus_data)
     bus_data[:, 0] -= 1
-    bus_data[:, 2] = np.deg2rad(bus_data[:, 2])
     bus_data[:, 4:8] /= base_MVA
     bus_data[:, 3] = np.deg2rad(bus_data[:, 3])
     bus_data_df = pd.DataFrame(bus_data, columns=cols)
@@ -116,6 +115,8 @@ class Branch:
         self.no = np.arange(len(branch_data) * 2)
         self.i = np.r_[branch_data.idx_from.values, branch_data.idx_to.values]
         self.j = np.r_[branch_data.idx_to.values, branch_data.idx_from.values]
+        self.yij = np.r_[branch_data.m_yij_d_conj_aij.values, branch_data.m_yij_d_aij.values]
+        self.ysi = np.r_[branch_data.yij_p_bsi_d_aij_p2.values, branch_data.yij_p_bsi.values]
         self.gij = np.r_[np.real(branch_data.yij.values), np.real(branch_data.yij.values)]
         self.bij = np.r_[np.imag(branch_data.yij.values), np.imag(branch_data.yij.values)]
         self.bsi = np.r_[branch_data.bsi.values / 2, branch_data.bsi.values / 2]
