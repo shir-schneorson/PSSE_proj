@@ -77,6 +77,8 @@ class Cm:
                   (bra.gij[self.idx] ** 2 + bra.bij[self.idx] *
                    (bra.bij[self.idx] + bra.bsi[self.idx])))
         self.D = bra.tij[self.idx] ** 2 * bra.pij[self.idx] * bra.gij[self.idx] * bra.bsi[self.idx]
+        self.yij = bra.yij[self.idx]
+        self.ysi = bra.ysi[self.idx]
         self.fij = bra.fij[self.idx]
         self.bus = bus_data['idx_bus'].values
 

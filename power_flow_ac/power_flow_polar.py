@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.sparse import coo_array
 
+from power_flow_ac.compose_meausrement import Pi, Qi, Pf, Qf, Cm, Vm
+
 
 def injection_acse(V, T, p, q, nb):
     U = T[p.i] - T[p.j]
@@ -93,13 +95,17 @@ def current_acse(V, T, c, nb):
 
     Tc1 = c.C * np.cos(U) - c.D * np.sin(U)
     Fc = np.sqrt(c.A * Vi ** 2 + c.B * Vj ** 2 - 2 * Vi * Vj * Tc1)
+    mask = Fc != 0
 
     Tc2 = c.C * np.sin(U) + c.D * np.cos(U)
-    Iij_Ti = (Vi * Vj * Tc2) / (Fc + 1e-7)
+    Iij_Ti = np.zeros_like(Fc)
+    Iij_Ti[mask] = (Vi[mask] * Vj[mask] * Tc2[mask]) / Fc[mask]
     Iij_Tj = -Iij_Ti
 
-    Iij_Vi = (-Vj * Tc1 + c.A * Vi) / (Fc + 1e-7)
-    Iij_Vj = (-Vi * Tc1 + c.B * Vj) / (Fc + 1e-7)
+    Iij_Vi = np.zeros_like(Fc)
+    Iij_Vj = np.zeros_like(Fc)
+    Iij_Vi[mask] = (-Vj[mask] * Tc1[mask] + c.A[mask] * Vi[mask]) / Fc[mask]
+    Iij_Vj[mask] = (-Vi[mask] * Tc1[mask] + c.B[mask] * Vj[mask]) / Fc[mask]
 
     J31 = coo_array((np.r_[Iij_Ti, Iij_Tj], [c.jci, c.jcj]), (c.N, nb)).toarray()
     J32 = coo_array((np.r_[Iij_Vi, Iij_Vj], [c.jci, c.jcj]), (c.N, nb)).toarray()
@@ -120,14 +126,29 @@ def voltage_acse(V, vm, nb):
     return Fv, Jv
 
 class H_AC:
-    def __init__(self, pi, qi, pf, qf, cm, vm, nb):
-        self.pi = pi
-        self.qi = qi
-        self.pf = pf
-        self.qf = qf
-        self.cm = cm
-        self.vm = vm
-        self.nb = nb
+    def __init__(self, sys, branch, meas_idx):
+        Pi_idx = Qi_idx  = Vm_idx = np.zeros(sys.nb).astype(bool)
+        Pf_idx = Qf_idx = Cm_idx = np.zeros_like(branch.i).astype(bool)
+        if meas_idx.get('Pi_idx') is not None:
+            Pi_idx = meas_idx['Pi_idx']
+        if meas_idx.get('Qi_idx') is not None:
+            Qi_idx = meas_idx['Qi_idx']
+        if meas_idx.get('Pf_idx') is not None:
+            Pf_idx = meas_idx['Pf_idx']
+        if meas_idx.get('Qf_idx') is not None:
+            Qf_idx = meas_idx['Qf_idx']
+        if meas_idx.get('Cm_idx') is not None:
+            Cm_idx = meas_idx['Cm_idx']
+        if meas_idx.get('Vm_idx') is not None:
+            Vm_idx = meas_idx['Vm_idx']
+        self.pi = Pi(Pi_idx, sys.bus, sys.Ybus, sys.Yij, sys.Yii)
+        self.qi = Qi(Qi_idx, sys.bus, sys.Ybus, sys.Yij, sys.Yii)
+        self.pf = Pf(Pf_idx, branch)
+        self.qf = Qf(Qf_idx, branch)
+        self.cm = Cm(Cm_idx, sys.bus, branch)
+        self.vm = Vm(Vm_idx, sys.bus)
+        self.nb = sys.nb
+
 
     def estimate(self, V, T):
         Ff, Jf = flow_acse(V, T, self.pf, self.qf, self.nb)

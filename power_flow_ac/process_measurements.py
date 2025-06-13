@@ -8,13 +8,15 @@ def load_flow(data, sample=False, exact=False):
         Pf_idx = flow_meas[:, 4].astype(bool)
         if sample:
             Pf_idx &= np.random.randint(2, size=len(flow_meas)).astype(bool)
-        if ~np.all(Pf_idx):
+        if ~np.any(Pf_idx):
             # Pf_idx = np.random.randint(2, size=len(flow_meas)).astype(bool)
             Pf_idx = np.ones(len(flow_meas), dtype=bool)
 
         if exact:
             Pf_meas = flow_meas[Pf_idx][:, 8]
-            Pf_meas_var = flow_meas[Pf_idx][:, 3]
+            # Pf_meas_var = flow_meas[Pf_idx][:, 3]
+            Pf_meas_var = np.ones_like(Pf_meas)
+
         else:
             Pf_meas = flow_meas[Pf_idx][:, 2]
             Pf_meas_var = flow_meas[Pf_idx][:, 3]
@@ -23,13 +25,14 @@ def load_flow(data, sample=False, exact=False):
         Qf_idx = flow_meas[:, 7].astype(bool)
         if sample:
             Qf_idx &= np.random.randint(2, size=len(flow_meas)).astype(bool)
-        if ~np.all(Qf_idx):
+        if ~np.any(Qf_idx):
             # Qf_idx = np.random.randint(2, size=len(flow_meas)).astype(bool)
             Qf_idx = np.ones(len(flow_meas), dtype=bool)
 
         if exact:
             Qf_meas = flow_meas[Qf_idx][:, 9]
-            Qf_meas_var = flow_meas[Qf_idx][:, 6]
+            # Qf_meas_var = flow_meas[Qf_idx][:, 6]
+            Qf_meas_var = np.ones_like(Qf_meas)
         else:
             Qf_meas = flow_meas[Qf_idx][:, 5]
             Qf_meas_var = flow_meas[Qf_idx][:, 6]
@@ -49,13 +52,14 @@ def load_current(data, sample=False, exact=False):
         Cm_idx = current_meas[:, 4].astype(bool)
         if sample:
             Cm_idx &= np.random.randint(2, size=len(current_meas)).astype(bool)
-        if ~np.all(Cm_idx):
+        if ~np.any(Cm_idx):
             # Cm_idx = np.random.randint(2, size=len(current_meas)).astype(bool)
             Cm_idx = np.ones(len(current_meas), dtype=bool)
 
         if exact:
             Cm_meas = current_meas[Cm_idx][:, 5]
-            Cm_meas_var = current_meas[Cm_idx][:, 3]
+            # Cm_meas_var = current_meas[Cm_idx][:, 3]
+            Cm_meas_var = np.ones_like(Cm_meas)
         else:
             Cm_meas = current_meas[Cm_idx][:, 2]
             Cm_meas_var = current_meas[Cm_idx][:, 3]
@@ -76,13 +80,14 @@ def load_injections(data, sample=False, exact=False):
         Pi_idx = injection_meas[:, 3].astype(bool)
         if sample:
             Pi_idx &= np.random.randint(2, size=len(injection_meas)).astype(bool)
-        if ~np.all(Pi_idx):
+        if ~np.any(Pi_idx):
             # Pi_idx = np.random.randint(2, size=len(injection_meas)).astype(bool)
             Pi_idx = np.ones(len(injection_meas), dtype=bool)
 
         if exact:
             Pi_meas = injection_meas[Pi_idx][:, 7]
-            Pi_meas_var = injection_meas[Pi_idx][:, 2]
+            # Pi_meas_var = injection_meas[Pi_idx][:, 2]
+            Pi_meas_var = np.ones_like(Pi_meas)
         else:
             Pi_meas = injection_meas[Pi_idx][:, 1]
             Pi_meas_var = injection_meas[Pi_idx][:, 2]
@@ -90,12 +95,13 @@ def load_injections(data, sample=False, exact=False):
         Qi_idx = injection_meas[:, 6].astype(bool)
         if sample:
             Qi_idx &= np.random.randint(2, size=len(injection_meas)).astype(bool)
-        if ~np.all(Qi_idx):
+        if ~np.any(Qi_idx):
             # Qi_idx = np.random.randint(2, size=len(injection_meas)).astype(bool)
             Qi_idx = np.ones(len(injection_meas), dtype=bool)
         if exact:
             Qi_meas = injection_meas[Qi_idx][:, 8]
-            Qi_meas_var = injection_meas[Qi_idx][:, 5]
+            # Qi_meas_var = injection_meas[Qi_idx][:, 5]
+            Qi_meas_var = np.ones_like(Qi_meas)
         else:
             Qi_meas = injection_meas[Qi_idx][:, 4]
             Qi_meas_var = injection_meas[Qi_idx][:, 5]
@@ -115,12 +121,13 @@ def load_voltage(data, sample=False, exact=False):
         Vm_idx = voltage_meas[:, 3].astype(bool)
         if sample:
             Vm_idx &= np.random.randint(2, size=len(voltage_meas)).astype(bool)
-        if ~np.all(Vm_idx):
+        if ~np.any(Vm_idx):
             Vm_idx = np.random.randint(2, size=len(voltage_meas)).astype(bool)
             Vm_idx = np.ones(len(voltage_meas), dtype=bool)
         if exact:
             Vm_meas = voltage_meas[Vm_idx][:, 4]
-            Vm_meas_var = voltage_meas[Vm_idx][:, 2]
+            # Vm_meas_var = voltage_meas[Vm_idx][:, 2]
+            Vm_meas_var = np.ones_like(Vm_meas)
         else:
             Vm_meas = voltage_meas[Vm_idx][:, 1]
             Vm_meas_var = voltage_meas[Vm_idx][:, 2]
@@ -140,27 +147,32 @@ def load_legacy_measurements(legacy_data, **kwargs):
     measurement_type = kwargs.get('measurement_type', types)
     z = np.array([])
     v = np.array([])
-    indices = []
+    indices = {}
     if 'flow' in measurement_type:
         zf, varf, Pf_idx, Qf_idx = load_flow(legacy_data, sample, exact)
         z = np.r_[zf]
         v = np.r_[varf]
-        indices.extend([Pf_idx, Qf_idx])
+        indices['Pf_idx']= Pf_idx
+        indices['Qf_idx'] = Qf_idx
+
     if 'current' in measurement_type:
         zc, varc, Cm_idx = load_current(legacy_data, sample, exact)
         z = np.r_[z, zc]
         v = np.r_[v, varc]
-        indices.extend([Cm_idx])
+        indices['Cm_idx'] = Cm_idx
+
     if 'injection' in measurement_type:
         zi, vari, Pi_idx, Qi_idx = load_injections(legacy_data, sample, exact)
         z = np.r_[z, zi]
         v = np.r_[v, vari]
-        indices.extend([Pi_idx, Qi_idx])
+        indices['Pi_idx'] = Pi_idx
+        indices['Qi_idx'] = Qi_idx
+
     if 'voltage' in measurement_type:
         zv, varv, Vm_idx = load_voltage(legacy_data, sample, exact)
         z = np.r_[z, zv]
         v = np.r_[v, varv]
-        indices.extend([Vm_idx])
+        indices['Vm_idx'] = Vm_idx
 
 
     return z, v, indices

@@ -49,7 +49,7 @@ def process_bus_data(bus_data, generator_data, base_MVA):
     bus_data_df.sort_values(by=['idx_bus'], inplace=True, ignore_index=True)
 
     slack_bus = bus_data_df.loc[bus_data_df['bus_type'] == 3, 'idx_bus'].iloc[0].astype(int)
-    slack_bus = (slack_bus, bus_data_df.loc[slack_bus, 'To'])
+    slack_bus = (slack_bus, bus_data_df.loc[slack_bus, 'To'], bus_data_df.loc[slack_bus, 'Vo'])
 
     gen_cols =['Pg', 'Qg', 'Qmin', 'Qmax']
     if generator_data is not None:
