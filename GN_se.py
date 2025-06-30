@@ -1,30 +1,31 @@
 import numpy as np
+from tqdm import tqdm
 
 
-def GN_se(z, v, slk_bus, h_ac, nb, tol= 1e-10, max_iter=500, x0=None):
+def GN_se(x0, z, v, slk_bus, h_ac, nb, norm_H=None, tol= 1e-8, max_iter=500, prefix=''):
 
-    if x0 is None:
-        T = np.zeros(nb)
-        T[slk_bus[0]] = slk_bus[1]
-        V = np.ones(nb)
-    else:
-        T = x0[:nb]
-        T[slk_bus[0]] = slk_bus[1]
-        V = x0[nb:]
+    x = x0.copy()
+    T = x[:nb].copy()
+    # T[slk_bus[0]] = slk_bus[1]
+    V = x[nb:].copy()
 
-    x = np.r_[T, V]
-    R = np.diag(1. / v)
+    if norm_H is None:
+        norm_H = np.ones_like(z)
+
+    R = np.diag(norm_H / v)
+
     eps = np.inf
     converged = False
+    x_list = [x]
 
-    for iter in range(max_iter):
+    for iter in tqdm(range(max_iter), desc=f'Optimizing {prefix} with GN'):
         z_est, J = h_ac.estimate(V, T)
-        delta_z = z - z_est
-        J = np.delete(J, slk_bus[0], axis=1)
+        delta_z = (z - z_est)/ norm_H
+        J = np.delete(J, slk_bus[0], axis=1) / norm_H[:, None]
 
         JT_R_J = J.T @ R @ J
         cond_number = np.linalg.cond(JT_R_J)
-        if cond_number > 1e8:
+        if cond_number > 1e10:
             break
 
         delta_x = np.linalg.lstsq(J.T @ R @ J, J.T @ R @ delta_z, rcond=None)[0]
@@ -33,6 +34,7 @@ def GN_se(z, v, slk_bus, h_ac, nb, tol= 1e-10, max_iter=500, x0=None):
         eps = np.linalg.norm(delta_x, np.inf)
 
         x = x + delta_x
+        x_list.append(x.copy())
         T = x[:nb]
         V = x[nb:]
 
@@ -40,4 +42,4 @@ def GN_se(z, v, slk_bus, h_ac, nb, tol= 1e-10, max_iter=500, x0=None):
             converged = True
             break
 
-    return T, V, eps, iter, converged
+    return x, x_list, converged

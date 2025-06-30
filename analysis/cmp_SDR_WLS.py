@@ -2,111 +2,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from SGD_se import FGD_se
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
-from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
 from SDP_se import SDP_se
 from GN_se import GN_se
 from power_flow_ac.init_starting_point import init_start_point
-
-file = "C:/Users/shirsc/PycharmProjects/PSSE_proj/nets/ieee30_41.mat"
-
-def generate_data(data, sys, branch, init_params, **kwargs):
-    T_true, V_true = init_start_point(sys, data, how='random', random_init=init_params)
-    Vc_true = V_true * np.exp(1j * T_true)
-    meas_idx = {}
-    if kwargs.get('flow'):
-        meas_idx['Pf_idx'] = np.ones(len(branch.i)).astype(bool)
-        meas_idx['Qf_idx'] = np.ones(len(branch.i)).astype(bool)
-    if kwargs.get('injection'):
-        meas_idx['Pi_idx'] = np.ones(len(sys.bus)).astype(bool)
-        meas_idx['Qi_idx'] = np.ones(len(sys.bus)).astype(bool)
-    if kwargs.get('voltage'):
-        meas_idx['Vm_idx'] = np.ones(len(sys.bus)).astype(bool)
-    if kwargs.get('current'):
-        meas_idx['Cm_idx'] = np.ones(len(branch.i)).astype(bool)
-
-    agg_meas_idx = {}
-    last_idx = 0
-    meas_types = ['Pf', 'Qf', 'Cm', 'Pi', 'Qi', 'Vm']
-    for k in meas_types:
-        v = meas_idx.get(f'{k}_idx', [])
-        agg_meas_idx[k] = np.arange(last_idx, last_idx + len(v))
-        last_idx += len(v)
-
-    h_ac_cart = H_AC_cartesian(sys, branch, meas_idx)
-    h_ac_polar = H_AC_polar(sys, branch, meas_idx)
-    z, _ = h_ac_polar.estimate(V=V_true, T=T_true)
-    var = np.zeros(len(z))
-    if kwargs.get('noise'):
-        var = [
-            np.repeat(kwargs.get(f'{meas_type}_noise', 1),
-                      len(agg_meas_idx[meas_type]))
-            for meas_type in meas_types
-        ]
-        var = np.concatenate(var)
-        noise = np.random.normal(np.zeros_like(z), np.sqrt(var))
-        z += noise
-
-    return z, var, meas_idx, agg_meas_idx, h_ac_cart, h_ac_polar, T_true, V_true, Vc_true
+from utils import generate_data, square_mag, sample_from_SGD, RMSE, normalize_measurements, calc_dT, sample_from_SDR
 
 
-def square_mag(z, var, agg_meas_idx):
-    z_square = z.copy()
-    mag_idx = np.r_[agg_meas_idx['Cm'], agg_meas_idx['Vm']]
-    z_square[mag_idx] = z[mag_idx] ** 2
-    var_square = var.copy()
-    var_square[mag_idx] = 2 * (var[mag_idx] ** 2)
-    return z_square, var_square
+file = "/Users/shirschneorson/PycharmProjects/PSSE_proj/nets/ieee118_186.mat"
 
-
-def calc_dT(T_true, T_est):
-    T_true_deg = np.rad2deg(T_true)
-    T_est_deg = np.rad2deg(T_est)
-    return np.deg2rad((T_true_deg - T_est_deg + 180) % 360 - 180)
-    # return T_true - T_est
-
-def RMSE(T_true, V_true, T_est, V_est, nb):
-    dT = calc_dT(T_true, T_est)
-    dV = V_true - V_est
-
-    return np.sqrt(np.sum((np.r_[dT, dV]) ** 2) / (2 * nb))
-
-
-def sample_from_SDR(Vc_est, V_opt, sys, T_true, V_true, num_samples=50):
-    V_real, V_imag = np.real(Vc_est), np.imag(Vc_est)
-
-    T = np.arctan2(V_imag, V_real)
-    V = np.sqrt(V_real ** 2 + V_imag ** 2)
-
-    best_fit = RMSE(T_true, V_true, T, V, sys.nb)
-
-    T_best = T
-    V_best = V
-
-    for _ in range(num_samples):
-        mu = np.zeros(sys.nb * 2)
-        cov = .5 * np.block([[np.real(V_opt), -np.imag(V_opt)],
-                             [np.imag(V_opt), np.real(V_opt)]])
-        Vc = np.random.multivariate_normal(mu, cov)
-        Vc = Vc[:sys.nb] + 1j * Vc[sys.nb:]
-        V_real, V_imag = np.real(Vc), np.imag(Vc)
-        T = np.arctan2(V_imag, V_real)
-        V = np.sqrt(V_real ** 2 + V_imag ** 2)
-
-        fit = RMSE(T_true, V_true, T, V, sys.nb)
-
-        if fit < best_fit:
-            best_fit = fit
-            T_best = T
-            V_best = V
-
-    return T_best, V_best
 
 def run_experiment(data, sys, branch, init_params, **kwargs):
     rmse_sdr = []
     rmse_sdr_wls = []
     rmse_flt_wls = []
+    rmse_fgd_wls = []
+    rmse_agd_wls = []
 
     angle_error_sdr = []
     angle_error_sdr_wls = []
@@ -116,9 +29,12 @@ def run_experiment(data, sys, branch, init_params, **kwargs):
     mag_error_sdr_wls = []
     mag_error_flt_wls = []
 
+
     converged_sdr = []
     converged_sdr_wls = []
     converged_flt_wls = []
+    converged_fgd_wls = []
+    converged_agd_wls = []
 
     for i in tqdm(range(100)):
         sdr_converged = False
@@ -130,20 +46,41 @@ def run_experiment(data, sys, branch, init_params, **kwargs):
             V_est, V_opt, sdr_converged = SDP_se(z_sdr, var_sdr, sys.slk_bus, h_ac_cart, sys.nb)
         T_sdr, V_sdr = sample_from_SDR(V_est, V_opt, sys, T_true, V_true)
 
+        h_ac_cart_gd = H_AC_cartesian(sys, branch, meas_idx)
+        z_gd, h_ac_cart_gd.H = normalize_measurements(z_sdr, h_ac_cart_gd.H)
+
+        T0, V0 = init_start_point(sys, data, how='flat')
+        u0 = V0 * np.exp(1j * T0)
+
+        u_fgd, converged_fgd = FGD_se(u0, z_gd, h_ac_cart_gd)
+        u_agd, converged_age = FGD_se(u0, z_gd, h_ac_cart_gd, AGD_update=True)
+
+        u_fgd, T_fgd, V_fgd, err_fgd = sample_from_SGD(u_fgd, h_ac_cart_gd.H, z_gd)
+        u_agd, T_agd, V_agd, err_agd = sample_from_SGD(u_agd, h_ac_cart_gd.H, z_gd)
+
+        x_fgd = np.r_[T_fgd, V_fgd]
+        T_fgd_wls, V_fgd_wls, _, _, wls_fgd_converged = GN_se(z_wls, var_wls, sys.slk_bus, h_ac_polar, sys.nb,
+                                                              x0=x_fgd)
+        x_agd = np.r_[T_agd, V_agd]
+        T_agd_wls, V_agd_wls, _, _, wls_agd_converged = GN_se(z_wls, var_wls, sys.slk_bus, h_ac_polar, sys.nb,
+                                                              x0=x_agd)
         x_sdr = np.r_[T_sdr, V_sdr]
         T_sdr_wls, V_sdr_wls, _, _, wls_sdr_converged = GN_se(z_wls, var_wls, sys.slk_bus, h_ac_polar, sys.nb, x0=x_sdr)
 
-        x_flat = np.r_[init_start_point(sys, data, how='flat')]
+        x_flat = np.r_[T0, V0]
         T_flat, V_flat, _, _, wls_converged = GN_se(z_wls, var_wls, sys.slk_bus, h_ac_polar, sys.nb, x0=x_flat)
-
 
         converged_sdr.append(sdr_converged)
         converged_sdr_wls.append(wls_sdr_converged)
         converged_flt_wls.append(wls_converged)
+        converged_fgd_wls.append(wls_fgd_converged)
+        converged_agd_wls.append(wls_agd_converged)
 
         rmse_sdr.append(RMSE(T_true, V_true, T_sdr, V_sdr, sys.nb))
         rmse_sdr_wls.append(RMSE(T_true, V_true, T_sdr_wls, V_sdr_wls, sys.nb))
         rmse_flt_wls.append(RMSE(T_true, V_true, T_flat, V_flat, sys.nb))
+        rmse_fgd_wls.append(RMSE(T_true, V_true, T_fgd_wls, V_fgd_wls, sys.nb))
+        rmse_agd_wls.append(RMSE(T_true, V_true, T_agd_wls, V_agd_wls, sys.nb))
 
         angle_error_sdr.append(np.sqrt(np.rad2deg(calc_dT(T_true, T_sdr)) ** 2))
         angle_error_sdr_wls.append(np.sqrt(np.rad2deg(calc_dT(T_true, T_sdr_wls)) ** 2))
@@ -156,14 +93,19 @@ def run_experiment(data, sys, branch, init_params, **kwargs):
             print(f'[Trial {i + 1}] Converged: {converged_sdr[-1]}, RMSE SDR: {rmse_sdr[-1]:.4e}')
             print(f'[Trial {i + 1}] Converged: {converged_sdr_wls[-1]}, RMSE WLS SDR: {rmse_sdr_wls[-1]:.4e}')
             print(f'[Trial {i + 1}] Converged: {converged_flt_wls[-1]}, RMSE WLS FLT: {rmse_flt_wls[-1]:.4e}')
+            print(f'[Trial {i + 1}] Converged: {converged_fgd_wls[-1]}, RMSE WLS FGD: {rmse_fgd_wls[-1]:.4e}')
+            print(f'[Trial {i + 1}] Converged: {converged_agd_wls[-1]}, RMSE WLS FGD: {rmse_agd_wls[-1]:.4e}')
 
     mean_rmse_sdr = np.mean(rmse_sdr)
     mean_rmse_sdr_wls = np.mean(rmse_sdr_wls)
     mean_rmse_flt_wls = np.mean(rmse_flt_wls)
+    mean_rmse_fgd_wls = np.mean(rmse_fgd_wls)
+    mean_rmse_agd_wls = np.mean(rmse_agd_wls)
 
     mean_angle_error_sdr = np.mean(np.vstack(angle_error_sdr), axis=0)
     mean_angle_error_sdr_wls = np.mean(np.vstack(angle_error_sdr_wls), axis=0)
     mean_angle_error_flt_wls = np.mean(np.vstack(angle_error_flt_wls), axis=0)
+
     mean_mag_error_sdr = np.mean(np.vstack(mag_error_sdr), axis=0)
     mean_mag_error_sdr_wls = np.mean(np.vstack(mag_error_sdr_wls), axis=0)
     mean_mag_error_flt_wls = np.mean(np.vstack(mag_error_flt_wls), axis=0)
@@ -171,11 +113,13 @@ def run_experiment(data, sys, branch, init_params, **kwargs):
     mean_converged_sdr = np.mean(np.array(converged_sdr).astype(int))
     mean_converged_sdr_wls = np.mean(np.array(converged_sdr_wls).astype(int))
     mean_converged_flt_wls = np.mean(np.array(converged_flt_wls).astype(int))
+    mean_converged_fgd_wls = np.mean(np.array(converged_fgd_wls).astype(int))
+    mean_converged_agd_wls = np.mean(np.array(converged_agd_wls).astype(int))
 
-    return mean_rmse_sdr, mean_rmse_sdr_wls, mean_rmse_flt_wls, \
-           mean_angle_error_sdr, mean_angle_error_sdr_wls, mean_angle_error_flt_wls, \
-           mean_mag_error_sdr, mean_mag_error_sdr_wls, mean_mag_error_flt_wls, \
-           mean_converged_sdr, mean_converged_sdr_wls, mean_converged_flt_wls
+    return (mean_rmse_sdr, mean_rmse_sdr_wls, mean_rmse_flt_wls, mean_rmse_fgd_wls, mean_rmse_agd_wls,
+           mean_angle_error_sdr, mean_angle_error_sdr_wls, mean_angle_error_flt_wls,
+           mean_mag_error_sdr, mean_mag_error_sdr_wls, mean_mag_error_flt_wls,
+           mean_converged_sdr, mean_converged_sdr_wls, mean_converged_flt_wls, mean_converged_fgd_wls, mean_converged_agd_wls)
 
 
 def main():
@@ -188,14 +132,17 @@ def main():
               'noise': True, 'Pf_noise': 4e-4, 'Qf_noise': 4e-4, 'Cm_noise': 1e-4,
               'Pi_noise': 4e-4, 'Qi_noise': 4e-4, 'Vm_noise': 1e-4, 'verbose': True}
     for init_params in init_params_all:
-        mean_rmse_sdr, mean_rmse_sdr_wls, mean_rmse_flt_wls, \
-        mean_angle_error_sdr, mean_angle_error_sdr_wls, mean_angle_error_flt_wls, \
-        mean_mag_error_sdr, mean_mag_error_sdr_wls, mean_mag_error_flt_wls,\
-        mean_converged_sdr, mean_converged_sdr_wls, mean_converged_flt_wls = \
+        (mean_rmse_sdr, mean_rmse_sdr_wls, mean_rmse_flt_wls, mean_rmse_fgd_wls, mean_rmse_agd_wls,
+         mean_angle_error_sdr, mean_angle_error_sdr_wls, mean_angle_error_flt_wls,
+         mean_mag_error_sdr, mean_mag_error_sdr_wls, mean_mag_error_flt_wls,
+         mean_converged_sdr, mean_converged_sdr_wls, mean_converged_flt_wls, mean_converged_fgd_wls,
+         mean_converged_agd_wls) = \
             run_experiment(data, sys, branch, init_params, **kwargs)
         print(f'Converged {mean_converged_sdr * 100}%, Mean RMSE SDR: {mean_rmse_sdr:.4e}')
         print(f'Converged {mean_converged_sdr_wls * 100}%, Mean RMSE WLS SDR: {mean_rmse_sdr_wls:.4e}')
         print(f'Converged {mean_converged_flt_wls * 100}%, Mean RMSE WLS FLT: {mean_rmse_flt_wls:.4e}')
+        print(f'Converged {mean_converged_fgd_wls * 100}%, Mean RMSE WLS FGD: {mean_rmse_fgd_wls:.4e}')
+        print(f'Converged {mean_converged_agd_wls * 100}%, Mean RMSE WLS AGD: {mean_rmse_agd_wls:.4e}')
 
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))

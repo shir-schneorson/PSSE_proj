@@ -14,7 +14,7 @@ sys = System(system_data)
 
 legacy_data = data['data']['legacy']
 z, v, meas_indexes = load_legacy_measurements(legacy_data, exact=False, sample=False,
-                                              measurement_type=['flow', 'injection', 'current', 'voltage'])
+                                              measurement_type=['flow', 'injection', 'voltage'])
 branch = Branch(sys.branch)
 
 h_ac = H_AC(sys, branch, meas_indexes)

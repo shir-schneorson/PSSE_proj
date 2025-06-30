@@ -12,7 +12,7 @@ def parse_ieee_mat(file):
     return data
 
 
-def process_branch_data(line_data, in_transformer_data, shift_transformer_data):
+def process_branch_data(line_data, bus_idx_dict, in_transformer_data, shift_transformer_data):
     cols = ['idx_from', 'idx_to', 'rij', 'xij', 'bsi', 'tij', 'fij']
 
     line_data = line_data[line_data[:, -1] == 1, :-1]
@@ -31,7 +31,11 @@ def process_branch_data(line_data, in_transformer_data, shift_transformer_data):
     if shift_transformer_data is not None:
         branch_data = np.r_[branch_data, shift_transformer_data]
 
-    branch_data[:, [0, 1]] -= 1
+    bus_from = np.array([bus_idx_dict[orig] for orig in branch_data[:, 0]])
+    bus_to = np.array([bus_idx_dict[orig] for orig in branch_data[:, 1]])
+    branch_data[:, 0] = bus_from
+    branch_data[:, 1] = bus_to
+    # branch_data[:, [0, 1]] -= 1
     branch_data[:, -1] = np.deg2rad(branch_data[:, -1])
     branch_data_df = pd.DataFrame(branch_data, columns=cols)
 
@@ -42,11 +46,13 @@ def process_bus_data(bus_data, generator_data, base_MVA):
     cols = ['idx_bus', 'bus_type', 'Vo', 'To', 'Pl', 'Ql', 'rsh', 'xsh', 'Vmin', 'Vmax']
 
     nb = len(bus_data)
-    bus_data[:, 0] -= 1
     bus_data[:, 4:8] /= base_MVA
     bus_data[:, 3] = np.deg2rad(bus_data[:, 3])
     bus_data_df = pd.DataFrame(bus_data, columns=cols)
+    bus_data_df.rename(columns={'idx_bus': 'idx_bus_orig'}, inplace=True)
+    bus_data_df['idx_bus'] = bus_data_df.index
     bus_data_df.sort_values(by=['idx_bus'], inplace=True, ignore_index=True)
+    bus_idx_dict = {idx_orig: idx_new for idx_orig, idx_new in zip(bus_data_df.idx_bus_orig, bus_data_df.idx_bus)}
 
     slack_bus = bus_data_df.loc[bus_data_df['bus_type'] == 3, 'idx_bus'].iloc[0].astype(int)
     slack_bus = (slack_bus, bus_data_df.loc[slack_bus, 'To'], bus_data_df.loc[slack_bus, 'Vo'])
@@ -54,7 +60,7 @@ def process_bus_data(bus_data, generator_data, base_MVA):
     gen_cols =['Pg', 'Qg', 'Qmin', 'Qmax']
     if generator_data is not None:
         generator_data = generator_data[generator_data[:, -1] == 1, :-1]
-        idx_bus_gen = (generator_data[:, 0] - 1).astype(int)
+        idx_bus_gen = np.array([bus_idx_dict[orig] for orig in generator_data[:, 0]]).astype(int)
         generator_data[:, 1:5] /= base_MVA
 
         nge = len(generator_data)
@@ -64,7 +70,7 @@ def process_bus_data(bus_data, generator_data, base_MVA):
     else:
         bus_data_df.loc[:, gen_cols] = 0
 
-    return bus_data_df, slack_bus
+    return bus_data_df, slack_bus, bus_idx_dict
 
 
 def generate_Ybus(bus_data, branch_data):
@@ -132,8 +138,8 @@ class System:
         line_data = system_data['line']
         in_transformer_data = system_data.get('inTransformer')
         shift_transformer_data = system_data.get('shiftTransformer')
-        self.bus, self.slk_bus = process_bus_data(bus_data, generator_data, self.baseMVA)
-        self.branch = process_branch_data(line_data, in_transformer_data, shift_transformer_data)
+        self.bus, self.slk_bus, bus_idx_dict = process_bus_data(bus_data, generator_data, self.baseMVA)
+        self.branch = process_branch_data(line_data, bus_idx_dict, in_transformer_data, shift_transformer_data)
         self.nbr = len(self.branch)
         self.nb = len(self.bus)
         self.Ybus, self.Yii, self.Yij, self.branch = generate_Ybus(self.bus, self.branch)
