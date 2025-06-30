@@ -1,17 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from tqdm import tqdm
 
-from LM_se import LMOptimizerSE
-from SGD_se import FGD_se, step_size
+from optimizers.LM_se import LMOptimizerSE
+from optimizers.SGD_se import FGD_se, step_size
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
-from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
-from SDP_se import SDP_se
-from GN_se import GN_se
+from optimizers.GN_se import GN_se
 from power_flow_ac.init_starting_point import init_start_point
-from utils import generate_data, square_mag, sample_from_SGD, RMSE, normalize_measurements, calc_dT, sample_from_SDR, \
-    iterative_err
+from utils import generate_data, square_mag, sample_from_SGD, normalize_measurements, iterative_err
 
 file = "/Users/shirschneorson/PycharmProjects/PSSE_proj/nets/ieee118_186.mat"
 
@@ -64,7 +60,7 @@ def run_experiment(data, sys, branch, init_params, **kwargs):
         LM_norm_opt = LMOptimizerSE(h_ac_polar, measurements, variance, sys.slk_bus, sys.nb, eta, norm_H=norm_H)
         x_lm_norm, all_x_lm_norm, converged_lm_norm = LM_norm_opt.optimize(x0)
         T_lm_norm, V_lm_norm = x_lm_norm[:sys.nb], x_lm_norm[sys.nb:]
-        x_lm_norm_gn, all_x_lm_norm_gn, lm_norm_gn_converged = GN_se(x_lm, measurements, variance, sys.slk_bus, h_ac_polar, sys.nb, prefix='LM-norm')
+        x_lm_norm_gn, all_x_lm_norm_gn, lm_norm_gn_converged = GN_se(x_lm_norm, measurements, variance, sys.slk_bus, h_ac_polar, sys.nb, prefix='LM-norm')
         T_lm_norm_gn, V_lm_norm_gn = x_lm_norm_gn[:sys.nb], x_lm_norm_gn[sys.nb:]
 
         x_gn, all_x_gn, gn_converged = GN_se(x0, measurements, variance, sys.slk_bus, h_ac_polar, sys.nb)

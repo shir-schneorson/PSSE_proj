@@ -2,14 +2,12 @@ import numpy as np
 
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.process_measurements import load_legacy_measurements
-from power_flow_ac.compose_meausrement import Pf, Qf, Pi, Qi, Vm
 from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
 from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
-from SDP_se import SDP_se
-from GN_se import GN_se
-from power_flow_ac.init_starting_point import init_start_point
+from optimizers.SDP_se import SDP_se
+from optimizers.GN_se import GN_se
 
-file = 'nets/ieee30_41.mat'
+file = '../nets/ieee30_41.mat'
 
 data = parse_ieee_mat(file)
 system_data = data['data']['system']

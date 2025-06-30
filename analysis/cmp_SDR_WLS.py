@@ -2,11 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from SGD_se import FGD_se
+from optimizers.SGD_se import FGD_se
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
-from SDP_se import SDP_se
-from GN_se import GN_se
+from optimizers.SDP_se import SDP_se
+from optimizers.GN_se import GN_se
 from power_flow_ac.init_starting_point import init_start_point
 from utils import generate_data, square_mag, sample_from_SGD, RMSE, normalize_measurements, calc_dT, sample_from_SDR
 

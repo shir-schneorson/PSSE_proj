@@ -1,16 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from GN_se import GN_se
+from optimizers.GN_se import GN_se
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.process_measurements import load_legacy_measurements
 from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
 from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
-from SGD_se import FGD_se
+from optimizers.SGD_se import FGD_se
 from utils import aggregate_meas_idx, square_mag, sample_from_SGD, RMSE, normalize_measurements, iterative_err
 from power_flow_ac.init_starting_point import init_start_point
 
-file = 'nets/ieee118_186.mat'
+file = '../nets/ieee118_186.mat'
 
 data = parse_ieee_mat(file)
 system_data = data['data']['system']

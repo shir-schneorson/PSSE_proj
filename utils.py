@@ -1,11 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
-from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
 from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
-from SGD_se import SGD_se_obj
+from optimizers.SGD_se import SGD_se_obj
 from power_flow_ac.init_starting_point import init_start_point
 
 file = "C:/Users/shirsc/PycharmProjects/PSSE_proj/nets/ieee30_41.mat"

@@ -4,9 +4,9 @@ from power_flow_ac.init_starting_point import init_start_point
 from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
 from power_flow_ac.process_measurements import load_legacy_measurements
 from power_flow_ac.power_flow_polar import H_AC
-from GN_se import GN_se
+from optimizers.GN_se import GN_se
 
-file = 'nets/ieee118_186.mat'
+file = '../nets/ieee118_186.mat'
 
 data = parse_ieee_mat(file)
 system_data = data['data']['system']
