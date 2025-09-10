@@ -1,9 +1,9 @@
 import numpy as np
 
-from power_flow_ac.process_net_data import parse_ieee_mat, System, Branch
-from power_flow_ac.process_measurements import load_legacy_measurements
-from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
-from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
+from init_net.process_net_data import parse_ieee_mat, System, Branch
+from init_net.process_measurements import load_legacy_measurements
+from init_net.power_flow_cartesian import H_AC as H_AC_cartesian
+from init_net.power_flow_polar import H_AC as H_AC_polar
 from optimizers.SDP_se import SDP_se
 from optimizers.GN_se import GN_se
 

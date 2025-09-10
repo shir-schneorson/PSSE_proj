@@ -3,6 +3,7 @@ import pandas as pd
 from scipy.io import loadmat
 from scipy.sparse import coo_array
 
+
 def parse_ieee_mat(file):
     data = loadmat(file)  # Ensure this file contains 'data.system.line'
     data['data'] = {n: data['data'][n][0, 0] for n in data['data'].dtype.names}
@@ -55,7 +56,7 @@ def process_bus_data(bus_data, generator_data, base_MVA):
     bus_idx_dict = {idx_orig: idx_new for idx_orig, idx_new in zip(bus_data_df.idx_bus_orig, bus_data_df.idx_bus)}
 
     slack_bus = bus_data_df.loc[bus_data_df['bus_type'] == 3, 'idx_bus'].iloc[0].astype(int)
-    slack_bus = (slack_bus, bus_data_df.loc[slack_bus, 'To'], bus_data_df.loc[slack_bus, 'Vo'])
+    slack_bus = [slack_bus, bus_data_df.loc[slack_bus, 'To'], bus_data_df.loc[slack_bus, 'Vo']]
 
     gen_cols =['Pg', 'Qg', 'Qmin', 'Qmax']
     if generator_data is not None:
@@ -116,6 +117,8 @@ def generate_Ybus(bus_data, branch_data):
 
     return Ybus, Yii, Yij, branch_data
 
+
+
 class Branch:
     def __init__(self, branch_data):
         self.no = np.arange(len(branch_data) * 2)
@@ -132,14 +135,40 @@ class Branch:
 
 
 class System:
-    def __init__(self, system_data):
-        self.baseMVA = system_data['baseMVA'][0, 0]
-        bus_data, generator_data = system_data['bus'], system_data.get('generator')
-        line_data = system_data['line']
-        in_transformer_data = system_data.get('inTransformer')
-        shift_transformer_data = system_data.get('shiftTransformer')
-        self.bus, self.slk_bus, bus_idx_dict = process_bus_data(bus_data, generator_data, self.baseMVA)
-        self.branch = process_branch_data(line_data, bus_idx_dict, in_transformer_data, shift_transformer_data)
-        self.nbr = len(self.branch)
-        self.nb = len(self.bus)
-        self.Ybus, self.Yii, self.Yij, self.branch = generate_Ybus(self.bus, self.branch)
+    def __init__(self,system_data=None, **kwargs):
+        if system_data is not None:
+            self.baseMVA = system_data['baseMVA'][0, 0]
+            bus_data, generator_data = system_data['bus'], system_data.get('generator')
+            line_data = system_data['line']
+            in_transformer_data = system_data.get('inTransformer')
+            shift_transformer_data = system_data.get('shiftTransformer')
+            self.bus, self.slk_bus, bus_idx_dict = process_bus_data(bus_data, generator_data, self.baseMVA)
+            self.branch = process_branch_data(line_data, bus_idx_dict, in_transformer_data, shift_transformer_data)
+            self.nbr = len(self.branch)
+            self.nb = len(self.bus)
+            self.Ybus, self.Yii, self.Yij, self.branch = generate_Ybus(self.bus, self.branch)
+        else:
+            self.baseMVA = kwargs.get('baseMVA')
+            self.bus = kwargs.get('bus')
+            self.branch = kwargs.get('branch')
+            self.nbr = kwargs.get('nbr')
+            self.nb = kwargs.get('nb')
+            self.slk_bus = kwargs.get('slk_bus')
+            self.Ybus = kwargs.get('Ybus')
+            self.Yii = kwargs.get('Yii')
+            self.Yij = kwargs.get('Yij')
+
+    def copy(self):
+        baseMVA = self.baseMVA.copy()
+        bus = self.bus.copy()
+        branch = self.branch.copy()
+        nbr = self.nbr
+        nb = self.nb
+        slk_bus = self.slk_bus.copy()
+        Ybus = self.Ybus.copy()
+        Yii = self.Yii.copy()
+        Yij = self.Yij.copy()
+        return System(**{'baseMVA': baseMVA, 'bus': bus, 'branch': branch,
+                       'nbr': nbr, 'nb': nb, 'slk_bus':slk_bus, 'Ybus': Ybus,
+                       'Yii': Yii, 'Yij': Yij})
+

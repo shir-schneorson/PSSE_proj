@@ -1,18 +1,45 @@
 import numpy as np
+from numpy._typing import NDArray
 
-from power_flow_ac.power_flow_cartesian import H_AC as H_AC_cartesian
-from power_flow_ac.power_flow_polar import H_AC as H_AC_polar
+from init_net.power_flow_cartesian import H_AC as H_AC_cartesian
+from init_net.power_flow_polar import H_AC as H_AC_polar
 from optimizers.SGD_se import SGD_se_obj
-from power_flow_ac.init_starting_point import init_start_point
+from init_net.init_starting_point import init_start_point
 
 file = "C:/Users/shirsc/PycharmProjects/PSSE_proj/nets/ieee30_41.mat"
 
+def normalize_measurements(
+    H: NDArray[np.complex128] | NDArray[np.float64],
+    z: NDArray[np.complex128] | NDArray[np.float64]
+) -> tuple[NDArray, NDArray, NDArray]:
+    """
+    Normalize each (z_l, H_l) pair by ||H_l||_F.
 
-def normalize_measurements(measurements, H):
-    norm = np.linalg.norm(H, ord='fro', axis=(1, 2))
-    measurements_normalized = measurements / norm
-    H_normalized = H / norm[:, None, None]
-    return measurements_normalized, H_normalized, norm
+    Parameters
+    ----------
+    H : (L, n, n) ndarray
+        Measurement matrices.
+    z : (L,) ndarray
+        Measurement scalars.
+
+    Returns
+    -------
+    H_normalized : (L, n, n) ndarray
+        Each H_l divided by ||H_l||_F.
+    z_normalized : (L,) ndarray
+        Each z_l divided by ||H_l||_F.
+    """
+    norms = np.linalg.norm(H, axis=(1, 2)) + 1e-12  # (L,), avoid divide-by-zero
+    H_normalized = H / norms[:, None, None]
+    z_normalized = z / norms
+    return z_normalized, H_normalized, norms
+
+# def normalize_measurements(measurements, H):
+#     norm = np.linalg.norm(H, ord='fro', axis=(1, 2))
+#
+#     measurements_normalized = measurements / norm
+#     H_normalized = H / norm[:, None, None]
+#     return measurements_normalized, H_normalized, norm
 
 
 def aggregate_meas_idx(meas_idx, meas_types):
@@ -24,8 +51,15 @@ def aggregate_meas_idx(meas_idx, meas_types):
         last_idx += len(v)
     return agg_meas_idx
 
+
 def generate_data(data, sys, branch, init_params, **kwargs):
-    T_true, V_true = init_start_point(sys, data, how='random', random_init=init_params)
+    sys.slk_bus[1] = 0
+    sys.slk_bus[2] = 1
+    if kwargs.get('data_generator') is not None:
+        data_generator = kwargs.get('data_generator')
+        T_true, V_true = data_generator.sample(sys)
+    else:
+        T_true, V_true = init_start_point(sys, data, how='random', random_init=init_params)
     Vc_true = V_true * np.exp(1j * T_true)
     meas_idx = {}
     if kwargs.get('flow'):
@@ -45,7 +79,7 @@ def generate_data(data, sys, branch, init_params, **kwargs):
     h_ac_cart = H_AC_cartesian(sys, branch, meas_idx)
     h_ac_polar = H_AC_polar(sys, branch, meas_idx)
     z, _ = h_ac_polar.estimate(V=V_true, T=T_true)
-    var = np.zeros(len(z))
+    var = np.ones(len(z))
     if kwargs.get('noise'):
         var = [
             np.repeat(kwargs.get(f'{meas_type}_noise', 1),
@@ -75,13 +109,10 @@ def calc_dT(T_true, T_est):
     # return T_true - T_est
 
 def RMSE(T_true, V_true, T_est, V_est):
-    # dT = calc_dT(T_true, T_est)
-    # dV = V_true - V_est
-    # err = np.sqrt(np.sum((np.r_[dT, dV]) ** 2) / (2 * nb))
     u_est = V_est * np.exp(1j * T_est)
     u_true = V_true * np.exp(1j * T_true)
-    err = np.sqrt(np.sum((u_est - u_true) ** 2) / len(u_true))
-    return err
+    err = np.linalg.norm(u_est - u_true) / np.linalg.norm(u_true)
+    return np.real(err)
 
 def iterative_err(T_true, V_true, T_est=None, V_est=None, **kwargs):
     u_est = kwargs.get('u_est', None)
@@ -127,7 +158,7 @@ def sample_from_SDR(Vc_est, V_opt, sys, T_true, V_true, num_samples=50):
 
 def sample_from_SGD(u, H, measurements, num_samples=0):
     n = u.shape[0]
-    UUH = u @ np.conj(u).T
+    UUH = np.outer(u, np.conj(u))
     if u.size > u.shape[0]:
         eigvals, eigvecs = np.linalg.eigh(UUH)
         idx_max = np.argmax(eigvals)
@@ -141,15 +172,13 @@ def sample_from_SGD(u, H, measurements, num_samples=0):
                              [np.imag(UUH), np.real(UUH)]])
         u_curr = np.random.multivariate_normal(mu, cov)
         u_curr = u_curr[:n] + 1j * u_curr[n:]
-        u_curr = u_curr.reshape(-1, 1)
+        # u_curr = u_curr.reshape(-1, 1)
         err_curr = SGD_se_obj(u_curr, H, measurements)
         if err_curr < err:
             u = u_curr
             err = err_curr
 
-    u_real, u_imag = np.real(u), np.imag(u)
-
-    T = np.arctan2(u_imag, u_real).flatten()
-    V = np.sqrt(u_real ** 2 + u_imag ** 2).flatten()
+    T = np.angle(u).flatten()
+    V = np.abs(u).flatten()
 
     return u, T, V, err

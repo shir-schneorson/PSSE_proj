@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.sparse import coo_array
 
-from power_flow_ac.compose_meausrement import Pi, Qi, Pf, Qf, Cm, Vm
+from init_net.compose_meausrement import Pi, Qi, Pf, Qf, Cm, Vm
 
 
 def injection_acse(V, T, p, q, nb):

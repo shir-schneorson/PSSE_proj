@@ -6,32 +6,33 @@ def GN_se(x0, z, v, slk_bus, h_ac, nb, norm_H=None, tol= 1e-8, max_iter=500, pre
 
     x = x0.copy()
     T = x[:nb].copy()
-    # T[slk_bus[0]] = slk_bus[1]
+    T[slk_bus[0]] = slk_bus[1]
     V = x[nb:].copy()
 
+    is_norm = '-norm' if norm_H is not None else ''
     if norm_H is None:
         norm_H = np.ones_like(z)
 
-    R = np.diag(norm_H / v)
+    R = np.diag(1. / v)
 
-    eps = np.inf
     converged = False
     x_list = [x]
 
-    for iter in tqdm(range(max_iter), desc=f'Optimizing {prefix} with GN'):
+    for k in tqdm(range(max_iter), desc=f'Optimizing{prefix} with GN{is_norm}', leave=False, colour='green'):
         z_est, J = h_ac.estimate(V, T)
         delta_z = (z - z_est)/ norm_H
         J = np.delete(J, slk_bus[0], axis=1) / norm_H[:, None]
 
         JT_R_J = J.T @ R @ J
-        cond_number = np.linalg.cond(JT_R_J)
-        if cond_number > 1e10:
+        try:
+            delta_x = np.linalg.lstsq(JT_R_J, J.T @ R @ delta_z, rcond=None)[0]
+        except np.linalg.LinAlgError:
             break
 
-        delta_x = np.linalg.lstsq(J.T @ R @ J, J.T @ R @ delta_z, rcond=None)[0]
         delta_x = np.insert(delta_x, slk_bus[0], 0)
 
         eps = np.linalg.norm(delta_x, np.inf)
+        err = np.linalg.norm(delta_z)
 
         x = x + delta_x
         x_list.append(x.copy())
@@ -42,4 +43,4 @@ def GN_se(x0, z, v, slk_bus, h_ac, nb, norm_H=None, tol= 1e-8, max_iter=500, pre
             converged = True
             break
 
-    return x, x_list, converged
+    return x, x_list, converged, k

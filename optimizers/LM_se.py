@@ -12,21 +12,24 @@ class LMOptimizerSE:
         self.h_ac = h_ac
         self.z = z
         self.v = v
+        self.norm_H = norm_H if norm_H is not None else np.ones_like(z)
         self.R = np.diag(1 / np.sqrt(v))
         self.slk_bus = slk_bus
         self.nb = nb
-        self.norm_H = norm_H if norm_H is not None else np.ones_like(z)
         self.K = K
         self.xtol = xtol
         self.ftol = ftol
         self.sigma = sigma
         self.delta_init = delta_init
+        self.prefix = '-norm' if norm_H is not None else ''
 
     def compute_J(self, x):
         T = x[:self.nb]
         V = x[self.nb:]
         _, J = self.h_ac.estimate(V, T)
-        return (- self.R @ J) / self.norm_H[:, np.newaxis]
+        J = (- self.R @ J) / self.norm_H[:, np.newaxis]
+        J = np.delete(J, self.slk_bus[0], axis=1)
+        return J
 
     def compute_f(self, x):
         T = x[:self.nb]
@@ -51,7 +54,7 @@ class LMOptimizerSE:
             return 2 * norm_Dp
 
         norm_f = np.linalg.norm(self.compute_f(x))
-        norm_fp = np.linalg.norm(self.compute_f(x + step_size))
+        norm_fp = np.linalg.norm(self.compute_f(x + np.insert(step_size, self.slk_bus[0], 0)))
         if norm_fp <= norm_f:
             mu = .5
         elif norm_fp > 10 * norm_f:
@@ -124,7 +127,7 @@ class LMOptimizerSE:
 
     def compute_rho(self, x, D, step_size, alpha):
         norm_f = np.linalg.norm(self.compute_f(x))
-        norm_fp = np.linalg.norm(self.compute_f(x + step_size))
+        norm_fp = np.linalg.norm(self.compute_f(x + np.insert(step_size, self.slk_bus[0], 0)))
         norm_Jp = np.linalg.norm(self.compute_J(x) @ step_size)
         norm_Dp = np.linalg.norm(D @ step_size)
         num = 1 - (norm_fp / norm_f) ** 2
@@ -146,32 +149,26 @@ class LMOptimizerSE:
 
         x_list = [x]
 
-        for _ in tqdm(range(self.K), desc="Optimizing with Levenberg-Marquardt"):
+        for k in tqdm(range(self.K), desc=f"Optimizing with LM{self.prefix}"):
 
             step_size, lam = self.compute_step_size(f, J, D, delta)
             rho = self.compute_rho(x, D, step_size, lam)
 
-            for _ in range(10):
-                if rho > 1e-4:
+            if rho > 1e-4 or np.linalg.norm(step_size, np.inf) <= self.xtol:
+                x = x + np.insert(step_size, self.slk_bus[0], 0)
+                J = self.compute_J(x)
+                f = self.compute_f(x)
+
+                x_list.append(x.copy())
+
+                if np.linalg.norm(step_size, np.inf) <= self.xtol:
+                    converged = True
                     break
-                delta = self.compute_delta(x, rho, D, step_size, lam, delta_prev=delta)
 
-                step_size, lam = self.compute_step_size(f, J, D, delta)
-                rho = self.compute_rho(x, D, step_size, lam)
+                D = self.compute_D(J, D_prev=D)
 
-            x = x + step_size
-            J = self.compute_J(x)
-            f = self.compute_f(x)
+            delta = self.compute_delta(x, rho, D, step_size, lam, delta_prev=delta)
 
-            x_list.append(x.copy())
-
-            if np.linalg.norm(step_size, np.inf) <= self.xtol:
-                converged = True
-                break
-
-            delta = self.compute_delta(x, rho,  D, step_size, lam, delta_prev=delta)
-            D = self.compute_D(J, D_prev=D)
-
-        return x, x_list, converged
+        return x, x_list, converged, k
 
 

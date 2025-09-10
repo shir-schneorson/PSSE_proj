@@ -1,9 +1,6 @@
 import numpy as np
 
-import numpy as np
-from scipy.sparse import coo_array
-
-from power_flow_ac.compose_meausrement import Pi, Qi, Pf, Qf, Vm, Cm
+from init_net.compose_meausrement import Pi, Qi, Pf, Qf, Vm, Cm
 
 
 def Hinj(p, q, nb):
@@ -113,4 +110,7 @@ class H_AC:
     def estimate(self, Vc):
         V = np.outer(Vc, np.conj(Vc))
         z_est = np.linalg.trace(np.einsum('ijk,kl', self.H, V))
-        return z_est
+        J = - np.einsum('ijk,k->ij', self.H, Vc)
+        J = np.c_[np.angle(J), np.abs(J)]
+        return z_est, J
+
