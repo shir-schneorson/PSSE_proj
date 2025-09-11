@@ -10,7 +10,7 @@ from init_net.init_starting_point import init_start_point
 from init_net.power_flow_cartesian import H_AC
 from utils import generate_data, square_mag, sample_from_SGD, normalize_measurements, iterative_err, RMSE
 
-file = "/Users/shirschneorson/PycharmProjects/PSSE_proj/nets/ieee118_186.mat"
+file = "../nets/ieee118_186.mat"
 
 
 def run_experiment(data, sys, branch, init_params, **kwargs):

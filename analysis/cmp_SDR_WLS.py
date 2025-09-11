@@ -11,7 +11,7 @@ from init_net.init_starting_point import init_start_point
 from utils import generate_data, square_mag, sample_from_SGD, RMSE, normalize_measurements, calc_dT, sample_from_SDR
 
 
-file = "/Users/shirschneorson/PycharmProjects/PSSE_proj/nets/ieee118_186.mat"
+file = "../nets/ieee118_186.mat"
 
 
 def run_experiment(data, sys, branch, init_params, **kwargs):
