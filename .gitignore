@@ -174,4 +174,4 @@ cython_debug/
 .pypirc
 .idea
 sandbox
-data_parser/data
+SE_np/data_parser/data
