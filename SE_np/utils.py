@@ -25,13 +25,14 @@ def aggregate_meas_idx(meas_idx, meas_types):
 
 
 def generate_data(data, sys, branch, init_params, **kwargs):
-    sys.slk_bus[1] = 0
-    sys.slk_bus[2] = 1
+    # sys.slk_bus[1] = 0
+    # sys.slk_bus[2] = 1
     if kwargs.get('data_generator') is not None:
         data_generator = kwargs.get('data_generator')
         T_true, V_true = data_generator.sample(sys, random_flow=True)
     else:
         T_true, V_true = init_start_point(sys, data, how='random', random_init=init_params)
+    # V_true*=-1
     Vc_true = V_true * np.exp(1j * T_true)
     meas_idx = {}
     if kwargs.get('flow'):
@@ -156,7 +157,7 @@ def sample_from_SGD(u, H, measurements, num_samples=0):
     return u, T, V, err
 
 
-def init_start_point(sys, data, how='flat', dc_init=None,
+def init_start_point(sys, data=None, how='flat', dc_init=None,
                      flat_init=(0, 1), random_init=(0.3, 1, 1e-2)):
     if how == 'flat':
         T = np.deg2rad(np.repeat(flat_init[0], sys.nb))

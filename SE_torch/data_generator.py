@@ -2,7 +2,9 @@
 import os
 import torch
 import pandas as pd
+from tqdm import tqdm
 
+from SE_torch.utils import init_start_point
 from SE_torch.optimizers.NR_acpf import NR_PF
 from SE_torch.PF_equations.PF_polar import H_AC as H_AC_polar
 from SE_torch.PF_equations.PF_cartesian import H_AC as H_AC_cartesian
@@ -46,21 +48,21 @@ def regenerate_PQ_numeric_types(
     Torch version. Returns (P_L, Q_L, Pg, Qg) as torch.float64 tensors on 'device'.
     Uses only pandas to read sys.bus; all computations in torch.
     """
-    g = torch.Generator(device=device)
-    if seed is not None:
-        g.manual_seed(seed)
+    # g = torch.Generator(device=device)
+    # if seed is not None:
+    #     g.manual_seed(seed)
 
     bus = sys.bus.copy()
     nb = sys.nb
     assert len(bus) == nb, "sys.nb and sys.bus length mismatch"
 
     # Base active load
-    Pbase_L = torch.as_tensor(bus['Pl'].fillna(0.0).to_numpy(float), device=device)
+    Pbase_L = torch.as_tensor(bus['Pl'].fillna(0.0).values, dtype=torch.float32, device=device)
     if not torch.any(Pbase_L > 0):
         Pbase_L = torch.ones(nb, device=device)
 
     # Random multiplicative noise on P
-    dP = torch.normal(mean=0.0, std=load_sigma_frac, size=(nb,), generator=g, device=device)
+    dP = torch.normal(mean=0.0, std=load_sigma_frac, size=(nb,), device=device)
     P_L = torch.clamp(Pbase_L * (1.0 + dP), min=0.0)
 
     # PF per numeric bus_type
@@ -77,7 +79,7 @@ def regenerate_PQ_numeric_types(
     # default for missing types
     pf_nom[(pf_nom != pf_nom)] = 0.95  # NaNs to 0.95 (unlikely)
 
-    pf_L = torch.normal(mean=pf_nom, std=pf_sigma, generator=g)
+    pf_L = torch.normal(mean=pf_nom, std=pf_sigma)
     pf_L = torch.clamp(pf_L, 0.80, 0.999)
 
     # Reactive load from pf (lagging → +Q)
@@ -85,9 +87,9 @@ def regenerate_PQ_numeric_types(
     Q_L = P_L * torch.tan(torch.arccos(pf_L))
 
     # Generator masks & previous Pg
-    Qmin = torch.as_tensor(bus['Qmin'].to_numpy(float), device=device)
-    Qmax = torch.as_tensor(bus['Qmax'].to_numpy(float), device=device)
-    prev_Pg = torch.as_tensor(bus['Pg'].fillna(0.0).to_numpy(float), device=device)
+    Qmin = torch.as_tensor(bus['Qmin'].to_numpy(float), device=device, dtype=torch.float32)
+    Qmax = torch.as_tensor(bus['Qmax'].to_numpy(float), device=device, dtype=torch.float32)
+    prev_Pg = torch.as_tensor(bus['Pg'].fillna(0.0).to_numpy(float), device=device, dtype=torch.float32)
 
     finite_min = torch.isfinite(Qmin)
     finite_max = torch.isfinite(Qmax)
@@ -103,11 +105,11 @@ def regenerate_PQ_numeric_types(
         P_target = P_L.sum()
         Pg_raw = P_target * (w / w.sum())
 
-        Pg_noise = torch.normal(mean=0.0, std=gen_noise_frac, size=Pg_raw.shape, generator=g, device=device)
+        Pg_noise = torch.normal(mean=0.0, std=gen_noise_frac, size=Pg_raw.shape, device=device)
         Pg_gen = torch.clamp(Pg_raw + Pg_raw * Pg_noise, min=0.0)
 
-        if Pg_gen.sum() > 1e-9:
-            Pg_gen = Pg_gen * (P_target / Pg_gen.sum())
+        # if Pg_gen.sum() > 1e-9:
+        #     Pg_gen = Pg_gen * (P_target / Pg_gen.sum())
 
         Pg[gen_idx] = Pg_gen
 
@@ -116,23 +118,23 @@ def regenerate_PQ_numeric_types(
     Qmax_eff = torch.where(gen_mask, torch.nan_to_num(Qmax, nan=0.0), torch.zeros_like(Qmax))
 
     Qg = torch.zeros(nb, device=device)
-    has_range = (Qmax_eff > Qmin_eff)
-    mid = 0.5 * (Qmin_eff + Qmax_eff)
-    Qg[has_range] = mid[has_range]
-
-    Q_def = Q_L.sum() - Qg.sum()  # >0 → need more lagging (+Q)
-    if torch.abs(Q_def) > 1e-9 and gen_idx.numel() > 0:
-        room_up = torch.clamp(Qmax_eff - Qg, min=0.0)  # can go more +Q
-        room_dn = torch.clamp(Qg - Qmin_eff, min=0.0)  # can go more -Q
-
-        if Q_def > 0 and room_up.sum() > 1e-12:
-            w = room_up / room_up.sum()
-            Qg = torch.minimum(Qg + Q_def * w, Qmax_eff)
-        elif Q_def < 0 and room_dn.sum() > 1e-12:
-            w = room_dn / room_dn.sum()
-            Qg = torch.maximum(Qg + Q_def * w, Qmin_eff)
-
-    Qg[~gen_mask] = 0.0
+    # has_range = (Qmax_eff > Qmin_eff)
+    # mid = 0.5 * (Qmin_eff + Qmax_eff)
+    # Qg[has_range] = mid[has_range]
+    #
+    # Q_def = Q_L.sum() - Qg.sum()  # >0 → need more lagging (+Q)
+    # if torch.abs(Q_def) > 1e-9 and gen_idx.numel() > 0:
+    #     room_up = torch.clamp(Qmax_eff - Qg, min=0.0)  # can go more +Q
+    #     room_dn = torch.clamp(Qg - Qmin_eff, min=0.0)  # can go more -Q
+    #
+    #     if Q_def > 0 and room_up.sum() > 1e-12:
+    #         w = room_up / room_up.sum()
+    #         Qg = torch.minimum(Qg + Q_def * w, Qmax_eff)
+    #     elif Q_def < 0 and room_dn.sum() > 1e-12:
+    #         w = room_dn / room_dn.sum()
+    #         Qg = torch.maximum(Qg + Q_def * w, Qmin_eff)
+    #
+    # Qg[~gen_mask] = 0.0
 
     return P_L, Q_L, Pg, Qg
 
@@ -176,11 +178,18 @@ class DataGenerator:
             g.manual_seed(seed)
 
         if random_flow:
-            Pl, Ql, Pg, Qg = regenerate_PQ_numeric_types(sys, device=self.device, seed=seed)
-            Pl = Pl.view(1, -1)
-            Ql = Ql.view(1, -1)
-            Pg = Pg.view(1, -1)
-            Qg = Qg.view(1, -1)
+            Pl, Ql, Pg, Qg = [], [], [], []
+            for i in tqdm(range(num_samples), desc='Generating power', leave=False, colour='green'):
+                Pli, Qli, Pgi, Qgi = regenerate_PQ_numeric_types(sys, device=self.device, seed=seed)
+                Pl.append(Pli)
+                Ql.append(Qli)
+                Pg.append(Pgi)
+                Qg.append(Qgi)
+
+            Pl = torch.stack(Pl)
+            Ql = torch.stack(Ql)
+            Pg = torch.stack(Pg)
+            Qg = torch.stack(Qg)
         else:
             if self.Pl is None:
                 self.load_flow_from_dir()
@@ -191,13 +200,13 @@ class DataGenerator:
             Ql = self.Ql.index_select(0, row_idx)
             Qg = self.Qg.index_select(0, row_idx)
 
-        x_init = torch.stack([torch.zeros(sys.nb, device=self.device),
-                              torch.ones(sys.nb, device=self.device)], dim=1)
+        T0, V0 = init_start_point(sys)
+        x_init = torch.stack([T0, V0], dim=1)
 
         user = {'list': ['voltage'], 'stop': 1e-8, 'maxIter': 500}
 
         Vcs = []
-        for i in range(Pl.shape[0]):
+        for i in tqdm(range(Pl.shape[0]), desc='Computing states', leave=False, colour='green'):
             curr_sys = sys.copy()
             loads_i = torch.stack([Pl[i], Ql[i]], dim=1)
             gens_i  = torch.stack([Pg[i], Qg[i]], dim=1)
@@ -216,7 +225,7 @@ class DataGenerator:
 
         f64 = torch.float64
         c128 = torch.complex128
-        sys.slk_bus = [sys.slk_bus[0], 0, 1]
+        # sys.slk_bus = [sys.slk_bus[0], 0, 1]
         T_true, V_true = self.sample(sys, random_flow=True)
         T_true = T_true.to(device=device, dtype=f64)
         V_true = V_true.to(device=device, dtype=f64)
@@ -225,26 +234,28 @@ class DataGenerator:
         Vc_true = Vc_true.to(dtype=c128, device=device)
 
         meas_idx = {}
+        bus_mask = torch.ones(len(sys.bus), device=device)
         if kwargs.get('flow'):
             nbr = len(branch.i)
             half = nbr // 2
             Pf_mask = torch.cat([
-                torch.ones(half, dtype=torch.bool, device=device),
-                torch.zeros(half, dtype=torch.bool, device=device)
+                torch.ones(half, device=device),
+                torch.zeros(half, device=device)
             ], dim=0)
             Qf_mask = Pf_mask.clone()
-            meas_idx['Pf_idx'] = Pf_mask
-            meas_idx['Qf_idx'] = Qf_mask
+            meas_idx['Pf_idx'] = torch.bernoulli(Pf_mask * kwargs.get('sample', 1)).to(torch.bool)
+            meas_idx['Qf_idx'] = torch.bernoulli(Qf_mask * kwargs.get('sample', 1)).to(torch.bool)
 
         if kwargs.get('injection'):
-            meas_idx['Pi_idx'] = torch.ones(len(sys.bus), dtype=torch.bool, device=device)
-            meas_idx['Qi_idx'] = torch.ones(len(sys.bus), dtype=torch.bool, device=device)
+            meas_idx['Pi_idx'] = torch.bernoulli(bus_mask * kwargs.get('sample', 1)).to(torch.bool)
+            meas_idx['Qi_idx'] = torch.bernoulli(bus_mask * kwargs.get('sample', 1)).to(torch.bool)
 
         if kwargs.get('voltage'):
-            meas_idx['Vm_idx'] = torch.ones(len(sys.bus), dtype=torch.bool, device=device)
+            meas_idx['Vm_idx'] = torch.bernoulli(bus_mask * kwargs.get('sample', 1)).to(torch.bool)
 
         if kwargs.get('current'):
-            meas_idx['Cm_idx'] = torch.ones(len(branch.i), dtype=torch.bool, device=device)
+            meas_idx['Cm_idx'] = torch.bernoulli(
+                torch.ones(len(branch.i), device=device) * kwargs.get('sample', 1)).to(torch.bool)
 
         meas_types = ['Pf', 'Qf', 'Cm', 'Pi', 'Qi', 'Vm']
 
@@ -270,6 +281,7 @@ class DataGenerator:
                 mean=torch.zeros_like(var),
                 std=torch.sqrt(var)
             )
-            z = z + noise
+            z = z + (z * noise)
+
 
         return z, var, meas_idx, agg_meas_idx, h_ac_cart, h_ac_polar, T_true, V_true, Vc_true

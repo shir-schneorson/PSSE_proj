@@ -101,5 +101,5 @@ def main():
 if __name__ == '__main__':
 
     mu_y, cov_y = main()
-    np.save('mu_pl.npy', mu_y)
-    np.save('cov_pl.npy', cov_y)
+    np.save('gaussian_prior/mu_pl.npy', mu_y)
+    np.save('gaussian_prior/cov_pl.npy', cov_y)

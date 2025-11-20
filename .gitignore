@@ -175,3 +175,8 @@ cython_debug/
 .idea
 sandbox
 SE_np/data_parser/data
+SE_np/explore_prior/gaussian_prior/*
+SE_torch/learn_prior/datasets/*
+SE_torch/learn_prior/configs/*
+SE_torch/learn_prior/plot/*
+SE_torch/learn_prior/NF/models/*

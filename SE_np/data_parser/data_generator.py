@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 
 from SE_np.optimizers.NR_acpf import NR_PF
+from SE_np.utils import init_start_point
+
 
 def regenerate_PQ_numeric_types(
     sys,
@@ -131,8 +133,8 @@ class DataGenerator:
             Qg = self.Qg.loc[sampled_timeseries].values
 
 
-        # x_init = sys.bus.loc[:, ['To', 'Vo']].values
-        x_init = np.c_[np.zeros(sys.nb), np.ones(sys.nb)]
+        T0, V0 = init_start_point(sys, how='flat')
+        x_init = np.c_[T0, V0]
         user = {'list': ['voltage'], 'stop': 1e-8, 'maxIter': 500}
 
         Vcs = []

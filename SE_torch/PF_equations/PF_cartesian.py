@@ -24,15 +24,15 @@ def Hinj(p, q, nb, device=None):
     I = torch.eye(nb, device=device, dtype=torch.float64)
 
     # ----- P injections -----
-    IPi = I.index_select(0, torch.as_tensor(p.idx, device=device, dtype=torch.long))  # (Lp, nb)
+    IPi = I[p.idx]
     outer_eii_Pi = torch.einsum('ik,il->ikl', IPi, IPi)  # (Lp, nb, nb)
-    YPi = torch.matmul(outer_eii_Pi.to(torch.complex128), _to_c128(p.Ybu, device))   # (Lp, nb, nb)
+    YPi = torch.matmul(outer_eii_Pi.to(torch.complex128), p.Ybu)   # (Lp, nb, nb)
     HPi = 0.5 * (YPi + torch.conj(YPi.transpose(1, 2)))
 
     # ----- Q injections -----
-    IQi = I.index_select(0, torch.as_tensor(q.idx, device=device, dtype=torch.long))  # (Lq, nb)
+    IQi = I[q.idx]
     outer_eii_Qi = torch.einsum('ik,il->ikl', IQi, IQi)
-    YQi = torch.matmul(outer_eii_Qi.to(torch.complex128), _to_c128(q.Ybu, device))
+    YQi = torch.matmul(outer_eii_Qi.to(torch.complex128), q.Ybu)
     HQi = 0.5j * (YQi - torch.conj(YQi.transpose(1, 2)))
 
     return torch.cat([HPi, HQi], dim=0)  # (Lp+Lq, nb, nb)
@@ -42,24 +42,24 @@ def Hflow(pf, qf, nb, device=None):
     I = torch.eye(nb, device=device, dtype=torch.float64)
 
     # ----- P flows -----
-    IPi = I.index_select(0, torch.as_tensor(pf.i, device=device, dtype=torch.long))
-    IPj = I.index_select(0, torch.as_tensor(pf.j, device=device, dtype=torch.long))
+    IPi = I[pf.i]
+    IPj = I[pf.j]
     eii_P = torch.einsum('ik,il->ikl', IPi, IPi)  # (Lf, nb, nb)
     eij_P = torch.einsum('ik,il->ikl', IPi, IPj)
 
-    ysi_p = _to_c128(pf.ysi, device).unsqueeze(1).unsqueeze(2)  # (Lf,1,1)
-    yij_p = _to_c128(pf.yij, device).unsqueeze(1).unsqueeze(2)
+    ysi_p = pf.ysi.unsqueeze(1).unsqueeze(2)
+    yij_p = pf.yij.unsqueeze(1).unsqueeze(2)
     YPij = eii_P.to(torch.complex128) * ysi_p + eij_P.to(torch.complex128) * yij_p
     HPij = 0.5 * (YPij + torch.conj(YPij.transpose(1, 2)))
 
     # ----- Q flows -----
-    IQi = I.index_select(0, torch.as_tensor(qf.i, device=device, dtype=torch.long))
-    IQj = I.index_select(0, torch.as_tensor(qf.j, device=device, dtype=torch.long))
+    IQi = I[qf.i]
+    IQj = I[qf.j]
     eii_Q = torch.einsum('ik,il->ikl', IQi, IQi)
     eij_Q = torch.einsum('ik,il->ikl', IQi, IQj)
 
-    ysi_q = _to_c128(qf.ysi, device).unsqueeze(1).unsqueeze(2)
-    yij_q = _to_c128(qf.yij, device).unsqueeze(1).unsqueeze(2)
+    ysi_q = qf.ysi.unsqueeze(1).unsqueeze(2)
+    yij_q = qf.yij.unsqueeze(1).unsqueeze(2)
     YQij = eii_Q.to(torch.complex128) * ysi_q + eij_Q.to(torch.complex128) * yij_q
     HQij = 0.5j * (YQij - torch.conj(YQij.transpose(1, 2)))
 
@@ -69,16 +69,16 @@ def Hflow(pf, qf, nb, device=None):
 def Hcm(cm, nb, device=None):
     I = torch.eye(nb, device=device, dtype=torch.float64)
 
-    Ii = I.index_select(0, torch.as_tensor(cm.i, device=device, dtype=torch.long))  # (L, nb)
-    Ij = I.index_select(0, torch.as_tensor(cm.j, device=device, dtype=torch.long))
+    Ii = I[cm.i]
+    Ij = I[cm.j]
 
     eii = torch.einsum('ik,il->ikl', Ii, Ii)  # (L, nb, nb)
     eij = torch.einsum('ik,il->ikl', Ii, Ij)
     eji = torch.einsum('ik,il->ikl', Ij, Ii)
     ejj = torch.einsum('ik,il->ikl', Ij, Ij)
 
-    ysi = _to_c128(cm.ysi, device).unsqueeze(1).unsqueeze(2)  # (L,1,1)
-    yij = _to_c128(cm.yij, device).unsqueeze(1).unsqueeze(2)
+    ysi = cm.ysi.unsqueeze(1).unsqueeze(2)
+    yij = cm.yij.unsqueeze(1).unsqueeze(2)
 
     Hij = (
         ysi * torch.conj(ysi) * eii.to(torch.complex128)
@@ -91,7 +91,7 @@ def Hcm(cm, nb, device=None):
 
 def Hvm(vm, nb, device=None):
     I = torch.eye(nb, device=device, dtype=torch.float64)
-    IVmi = I.index_select(0, torch.as_tensor(vm.i, device=device, dtype=torch.long))  # (Lv, nb)
+    IVmi = I[vm.i]
     eii_V = torch.einsum('ik,il->ikl', IVmi, IVmi)  # (Lv, nb, nb)
     return eii_V.to(torch.complex128)  # keep complex dtype for uniformity
 

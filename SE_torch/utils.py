@@ -39,7 +39,7 @@ def RMSE(T_true: torch.Tensor, V_true: torch.Tensor, T_est: torch.Tensor, V_est:
     return err
 
 
-def init_start_point(sys, data, how='flat',
+def init_start_point(sys, data=None, how='flat',
                      flat_init=(0, 1), random_init=(0.3, 1, 1e-2)):
     if how == 'flat':
         T = torch.deg2rad(torch.full((sys.nb,), flat_init[0], dtype=torch.float64))

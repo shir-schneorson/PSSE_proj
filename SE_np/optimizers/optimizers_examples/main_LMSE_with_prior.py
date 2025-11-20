@@ -1,6 +1,6 @@
 import numpy as np
 
-from SE_np.optimizers import GN_se
+from SE_np.optimizers.GN_se import GN_se
 from SE_np.net_preprocess.process_net_data import parse_ieee_mat, System, Branch
 from SE_np.net_preprocess.process_measurements import load_legacy_measurements
 from SE_np.PF_equations.PF_cartesian import H_AC as H_AC_cartesian
@@ -10,7 +10,7 @@ from SE_np.optimizers.SGD_se import step_size
 from SE_np.utils import aggregate_meas_idx, square_mag, RMSE, normalize_measurements
 from SE_np.utils import init_start_point
 
-file = '/nets/ieee118_186.mat'
+file = '../../../nets/ieee118_186.mat'
 
 data = parse_ieee_mat(file)
 system_data = data['data']['system']
@@ -100,14 +100,3 @@ print(f"[LM]                             RMSE: {RMSE_lm:.8f}")
 print(f"[GN]                             RMSE: {RMSE_gn:.8f}")
 print(f"[FLAT INIT POINT]                RMSE: {RMSE_flat:.8f}")
 
-# all_lm_err = [np.real(iterative_err(T_true, V_true, x[:sys.nb], x[sys.nb:])) for x in all_x_lm]
-#
-# plt.plot(all_lm_err, ls='--', label='FGD - 118-bus')
-#
-# plt.xlabel('Number of Iterations')
-# plt.ylabel(r'$\frac{\|V_1 - V\|_F}{\|V\|_F}$')
-#
-# plt.grid(True, ls=':', alpha=0.7)
-# plt.legend()
-# plt.tight_layout()
-# plt.show()

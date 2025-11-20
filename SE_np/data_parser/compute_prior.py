@@ -47,8 +47,8 @@ def sample_data(sys, n=1000, mu=None, cov=None, **kwargs):
 
 
 def EM(sys, n=1000, num_iters=100, tol=1e-5):
-    mu_pq = np.load('../explore_prior/mu_pl.npy')
-    cov_pq = np.load('../explore_prior/cov_pl.npy')
+    mu_pq = np.load('../explore_prior/gaussian_prior/mu_pl.npy')
+    cov_pq = np.load('../explore_prior/gaussian_prior/cov_pl.npy')
     Pl, Pg, Ql, Qg, sampled_timeseries = sample_data(sys, n, mu_pq, cov_pq)
 
     R = np.eye(sys.nb * 2) * 1e-5
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     sys = System(system_data)
 
     m, Q = EM(sys)
-    np.save('../explore_prior/mu_v.npy', m)
-    np.save('../explore_prior/cov_v.npy', Q)
+    np.save('../explore_prior/gaussian_prior/mu_v.npy', m)
+    np.save('../explore_prior/gaussian_prior/cov_v.npy', Q)
     print(m)
     print(Q)

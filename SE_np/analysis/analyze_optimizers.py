@@ -5,7 +5,7 @@ from SE_np.data_parser.data_generator import DataGenerator
 from SE_np.optimizers.LM_se_with_prior import LMOptimizerSE
 from SE_np.optimizers.SGD_se import FGD_se, step_size
 from SE_np.net_preprocess.process_net_data import parse_ieee_mat, System, Branch
-from SE_np.optimizers import GN_se
+from SE_np.optimizers.GN_se import GN_se
 from SE_np.utils import init_start_point
 from SE_np.PF_equations.PF_cartesian import H_AC
 from SE_np.utils import generate_data, square_mag, sample_from_SGD, normalize_measurements, iterative_err, RMSE
@@ -244,8 +244,8 @@ def main():
     branch = Branch(sys.branch)
     init_params= (.35, .95, 1.05)
     data_generator = DataGenerator()
-    kwargs = {'flow': True, 'injection': True, 'voltage': True, 'current': False,
-              'noise': True, 'Pf_noise': 4e-4, 'Qf_noise': 4e-4, 'Cm_noise': 1e-4,
+    kwargs = {'flow': True, 'injection': True, 'voltage': False, 'current': True,
+              'noise': False, 'Pf_noise': 4e-4, 'Qf_noise': 4e-4, 'Cm_noise': 1e-4,
               'Pi_noise': 16e-4, 'Qi_noise': 16e-4, 'Vm_noise': 1.6e-05, 'verbose': True,
               'data_generator': data_generator}
     (rmse_gn, rmse_gn_norm, rmse_gn_norm_gn,
