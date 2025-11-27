@@ -179,7 +179,7 @@ class DataGenerator:
 
         if random_flow:
             Pl, Ql, Pg, Qg = [], [], [], []
-            for i in tqdm(range(num_samples), desc='Generating power', leave=False, colour='green'):
+            for i in range(num_samples):
                 Pli, Qli, Pgi, Qgi = regenerate_PQ_numeric_types(sys, device=self.device, seed=seed)
                 Pl.append(Pli)
                 Ql.append(Qli)
@@ -206,7 +206,7 @@ class DataGenerator:
         user = {'list': ['voltage'], 'stop': 1e-8, 'maxIter': 500}
 
         Vcs = []
-        for i in tqdm(range(Pl.shape[0]), desc='Computing states', leave=False, colour='green'):
+        for i in range(Pl.shape[0]):
             curr_sys = sys.copy()
             loads_i = torch.stack([Pl[i], Ql[i]], dim=1)
             gens_i  = torch.stack([Pg[i], Qg[i]], dim=1)
@@ -244,7 +244,7 @@ class DataGenerator:
             ], dim=0)
             Qf_mask = Pf_mask.clone()
             meas_idx['Pf_idx'] = torch.bernoulli(Pf_mask * kwargs.get('sample', 1)).to(torch.bool)
-            meas_idx['Qf_idx'] = torch.bernoulli(Qf_mask * kwargs.get('sample', 1)).to(torch.bool)
+            meas_idx['Qf_idx'] = torch.bernoulli(Qf_mask * kwargs.get('sample', 0)).to(torch.bool)
 
         if kwargs.get('injection'):
             meas_idx['Pi_idx'] = torch.bernoulli(bus_mask * kwargs.get('sample', 1)).to(torch.bool)

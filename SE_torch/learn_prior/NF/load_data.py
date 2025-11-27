@@ -10,6 +10,7 @@ BATCH_SIZE = 512
 DATA_DIM = 235
 HALF_DATA_DIM = 118
 
+
 def load_data(sys, n_samples, batch_size=BATCH_SIZE):
     if os.path.exists('../datasets/data.pt'):
         data = torch.load('../datasets/data.pt')

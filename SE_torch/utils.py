@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 def normalize_measurements(H: torch.Tensor, z: torch.Tensor):
     norms = torch.linalg.norm(H, dim=(1, 2)) + 1e-12

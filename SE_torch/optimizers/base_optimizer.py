@@ -4,8 +4,8 @@ import torch
 from torch import nn as nn
 from torch.distributions import MultivariateNormal
 
-from SE_torch.learn_prior.NF import FlowModel
-from SE_torch.learn_prior.NF import DATA_DIM
+from SE_torch.learn_prior.NF.NF import FlowModel
+from SE_torch.learn_prior.NF.NF import DATA_DIM
 
 torch.set_default_dtype(torch.float64)
 
@@ -37,7 +37,7 @@ class WeightedSEWithPriorLoss(nn.Module):
         self.R = R
         self.slk_bus = slk_bus
         NF_config =  json.load(open(NF_config_path))
-        ckpt_path = f"../learn_prior/models/{NF_config.get('ckpt_name')}"
+        ckpt_path = f"../learn_prior/NF/models/{NF_config.get('ckpt_name')}"
         self.flow_model = FlowModel(**NF_config)
         self.flow_model.load_state_dict(torch.load(ckpt_path))
         self.mean = torch.load("../learn_prior/datasets/mean.pt").to(torch.float64)

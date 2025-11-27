@@ -1,3 +1,5 @@
+import json
+
 import torch
 
 from SE_torch.PF_equations.PF_cartesian import H_AC as H_AC_cartesian
@@ -7,6 +9,7 @@ from SE_torch.utils import square_mag, normalize_measurements, RMSE, init_start_
 from SE_torch.optimizers.GN_se import GN_se
 from SE_torch.optimizers.LM_se import LM_se
 from SE_torch.optimizers.FO_se import SGD_se, AdamW_se, Muon_se, LBFGS_se
+from SE_torch.learn_prior.GNU_GNN.models import GNU_Model
 
 
 def run_experiment(data, sys, branch, data_generator, optimizers, **kwargs):
@@ -35,43 +38,33 @@ def run_experiment(data, sys, branch, data_generator, optimizers, **kwargs):
     return rmse, k, converged
 
 
-def main(net_file, num_experiments, verbose=False):
+def run_all_experiments(config):
+    net_file = config['net_file']
+    num_experiments = config['num_experiments']
+    verbose = config['verbose']
     data = parse_ieee_mat(net_file)
     system_data = data['data']['system']
     sys = System(system_data)
     branch = Branch(sys.branch)
     data_generator = DataGenerator()
-    kwargs = {'flow': True, 'injection': True, 'voltage': True, 'current': False,
-              'noise': True, 'Pf_noise': 4e-3, 'Qf_noise': 4e-3, 'Cm_noise': 1e-3,
-              'Pi_noise': 16e-3, 'Qi_noise': 16e-3, 'Vm_noise': 1.6e-03, 'verbose': True, 'sample': 0.7}
+    kwargs = config["generator_kwargs"]
     m, cov = torch.load('../learn_prior/datasets/mean.pt'), torch.load(
         '../learn_prior/datasets/cov.pt')
-    # kwargs = {'flow': True, 'injection': True, 'voltage': True, 'current': False,
-    #           'noise': True, 'Pf_noise': 4e-4, 'Qf_noise': 4e-4, 'Cm_noise': 1e-4,
-    #           'Pi_noise': 16e-4, 'Qi_noise': 16e-4, 'Vm_noise': 1.6e-05, 'verbose': True, 'sample': 0.7}
-    # kwargs = {'flow': True, 'injection': True, 'voltage': True, 'current': False,
-    #           'noise': True, 'Pf_noise': 1e-6, 'Qf_noise': 1e-6, 'Cm_noise': 1e-6,
-    #           'Pi_noise': 1e-6, 'Qi_noise': 1e-6, 'Vm_noise': 1e-6, 'verbose': True, 'sample': .8}
-    # optimizers = {'gn': GN_se(verbose=False, max_iter=100),
-    #               'lm_gs': LM_se(verbose=False, use_prior=True, m=m, Q=cov),
-    #               'lbfgs_nf_xs': LBFGS_se(verbose=False, use_prior=True,
-    #                                       prior_config_path="../learn_prior/configs/NF_2_0_8.json"),
-    #               'lbfgs_nf_s': LBFGS_se(verbose=False, use_prior=True,
-    #                                       prior_config_path="../learn_prior/configs/NF_2_0_64.json"),
-    #               'lbfgs_nf_m': LBFGS_se(verbose=False, use_prior=True,
-    #                                       prior_config_path="../learn_prior/configs/NF_4_0_64.json")
-    #               }
-    # optimizers = {f'lbfgs_nf_{i}_{j}_{k}':
-    #                   LBFGS_se(verbose=False, use_prior=True,
-    #                            prior_config_path=f"../learn_prior/configs/NF_{i}_{j}_{k}.json")
-    #               for i in [2, 4, 8] for j in [0, 2, 4] for k in [8, 64, 128]
-    #               }
-    optimizers = {}
-    # optimizers['lm_gs'] = LM_se(verbose=False, use_prior=True, m=m, Q=cov)
-    optimizers['gn'] = GN_se(verbose=False, max_iter=100)
-                  # 'adamw': AdamW_se(verbose=True, use_prior=True),
-                  # 'sgd': SGD_se(verbose=True, use_prior=True),}
-                  # 'muon': Muon_se(verbose=False),}
+
+    GNU_GNN_config = json.load(open("../learn_prior/configs/GNU_GNN_config.json"))
+    ckpt_path = f"../learn_prior/GNU_GNN/models/{GNU_GNN_config.get('ckpt_name')}"
+    GNU_GNN_model = GNU_Model(**GNU_GNN_config)
+    edge_index = torch.stack([branch.i, branch.j]).to(torch.long)
+    GNU_GNN_model.load_state_dict(torch.load(ckpt_path))
+    GNU_GNN_model.edge_index = edge_index
+    GNU_GNN_model.slk_bus = sys.slk_bus
+
+    optimizers = {'lbfgs_nf_8_0_128': LBFGS_se(verbose=False, use_prior=True,
+                                               prior_config_path="../learn_prior/configs/NF_8_0_128.json"),
+                  'lm_gs': LM_se(verbose=False, use_prior=True, m=m, Q=cov),
+                  'gnu_gnn': GNU_GNN_model.optimize,
+                  'gn': GN_se(verbose=False, max_iter=100)}
+
     all_rmse = {opt: [] for opt in optimizers.keys()}
     all_k = {opt: [] for opt in optimizers.keys()}
     all_conv = {opt: [] for opt in optimizers.keys()}
@@ -79,7 +72,6 @@ def main(net_file, num_experiments, verbose=False):
     for i in range(num_experiments):
         rmse, k, conv = run_experiment(data, sys, branch, data_generator, optimizers, **kwargs)
         for opt in optimizers.keys():
-            # if conv[opt]:
             all_rmse[opt].append(rmse[opt])
             all_k[opt].append(k[opt])
             all_conv[opt].append(conv[opt])
@@ -92,7 +84,7 @@ def main(net_file, num_experiments, verbose=False):
         all_rmse_opt = torch.Tensor(all_rmse[opt])
         all_k_opt = torch.Tensor(all_k[opt])
         all_conv_opt = torch.Tensor(all_conv[opt])
-        all_rmse_opt = all_rmse_opt[all_rmse_opt < torch.quantile(all_rmse_opt, 0.97)]
+        # all_rmse_opt = all_rmse_opt[all_rmse_opt < torch.quantile(all_rmse_opt, 0.97)]
         mean_rmse = torch.nanmean(all_rmse_opt)
         mean_k = torch.nanmean(all_k_opt)
         mean_conv = torch.nanmean(all_conv_opt)
@@ -100,9 +92,9 @@ def main(net_file, num_experiments, verbose=False):
         if verbose:
             print(f'[{opt.upper()}]  Mean RMSE: {mean_rmse:.8f}, Mean steps: {mean_k:.2f}, Mean convergence: {mean_conv:.2f}')
 
+def main():
+    config = json.load(open("./configs/analyze_optimizer_config.json"))
+    run_all_experiments(config)
 
 if __name__ == '__main__':
-    file = "../../nets/ieee118_186.mat"
-    num_exp = 100
-    verbose = True
-    main(file, num_exp, verbose)
+    main()

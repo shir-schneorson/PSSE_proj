@@ -7,6 +7,7 @@ from numpy import dtype
 from torch.distributions.multivariate_normal import MultivariateNormal
 
 import matplotlib.pyplot as plt
+from torch_geometric import edge_index
 from tqdm.auto import tqdm
 from SE_torch.learn_prior.GNU_GNN.models import GNU_Model
 from SE_torch.learn_prior.GNU_GNN.load_data import load_data
@@ -60,12 +61,34 @@ class Psi(nn.Module):
         self.c = nn.MSELoss()
         self.loss = nn.MSELoss()
 
-    def forward(self, model, z, v_true):
+    def forward(self, model, z, v_true, edge_index):
         zeta = z.clone().requires_grad_()
-        psi_loss = self.loss(model(zeta), v_true) + self.gamma * (self.rho - self.c(z, zeta))
+        psi_loss = self.loss(model(zeta, edge_index), v_true) + self.gamma * (self.rho - self.c(z, zeta))
         grad_psi_zeta = torch.autograd.grad(psi_loss, zeta)[0]
         return z + self.step_size * grad_psi_zeta
 
+
+class RMSE(nn.Module):
+    def __init__(self):
+        super(RMSE, self).__init__()
+
+    def forward(self, v_est, v_true):
+        half_dim = v_true.shape[1] // 2
+        X_true = v_true.view(-1, 2, half_dim).transpose(1, 2).reshape(-1, 2)
+        T_true, V_true = X_true[:, 0], X_true[:, 1]
+
+        X_est = v_est.view(-1, 2, half_dim).transpose(1, 2).reshape(-1, 2)
+        T_est, V_est = X_est[:, 0], X_est[:, 1]
+
+        u_true = V_true * torch.exp(1j * T_true)
+        u_est = V_est * torch.exp(1j * T_est)
+
+        res = u_est - u_true
+        num = torch.sqrt(torch.dot(torch.conj(res), res).sum())
+        den = torch.sqrt(torch.dot(torch.conj(u_true), u_true).sum()) + 1e-12
+
+        err = (num / den).real
+        return err
 
 class GNU_GNN_Trainer:
 
@@ -73,15 +96,14 @@ class GNU_GNN_Trainer:
                  num_epochs=NUM_EPOCHS, learning_rate=LEARNING_RATE,
                  ckpt_path='', device='cpu', dtype=torch.get_default_dtype()):
         self.GNU_model = GNU_model
-        self.train_loader, self.test_loader, self.train_dataset, self.data_mean, self.data_cov, self.data_std = data_loaders
+        self.train_loader, self.test_loader, self.train_dataset = data_loaders
 
         self.optimizer = optim.Adam(self.GNU_model.parameters(), lr=learning_rate)
-        self.psi = Psi()
-        self.criterion = nn.MSELoss()
+        self.psi = Psi().to(device=device, dtype=dtype)
+        self.criterion = RMSE().to(device=device, dtype=dtype)
 
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_epochs)
 
-        self.simple_data_dist = MultivariateNormal(self.data_mean, self.data_cov)
         self.num_epochs = num_epochs
         self.ckpt_path = ckpt_path
         self.device = device
@@ -94,12 +116,15 @@ class GNU_GNN_Trainer:
 
         for batch in tqdm(self.train_loader, desc=desc, colour='green'):
             self.optimizer.zero_grad()
-            z, v_true = batch
-            z = z.to(device=self.device, dtype=dtype)
-            v_true = v_true.to(device=self.device, dtype=dtype)
+            v_true, edge_index, z = batch.x, batch.edge_index, batch.y
+            z = z.to(device=self.device, dtype=self.dtype)
+            z = z.view(batch.batch_size, -1)
+            v_true = v_true.to(device=self.device, dtype=self.dtype)
+            v_true = v_true.view(batch.batch_size, -1, 2).transpose(1, 2).reshape(batch.batch_size, -1)
+            edge_index = edge_index.to(device=self.device)
 
-            zeta = self.psi(self.GNU_model, z, v_true)
-            v_est = self.GNU_model(zeta)
+            zeta = self.psi(self.GNU_model, z, v_true, edge_index)
+            v_est = self.GNU_model(zeta, edge_index)
 
             loss = self.criterion(v_est, v_true)
             loss.backward()
@@ -117,11 +142,14 @@ class GNU_GNN_Trainer:
 
         with torch.no_grad():
             for batch in tqdm(self.test_loader, desc=desc, colour='blue'):
-                z, v_true = batch
-                z = z.to(device=self.device, dtype=dtype)
+                v_true, edge_index, z = batch.x, batch.edge_index, batch.y
+                z = z.to(device=self.device, dtype=self.dtype)
+                z = z.view(batch.batch_size, -1)
+                v_true = v_true.to(device=self.device, dtype=self.dtype)
+                v_true = v_true.view(batch.batch_size, -1, 2).transpose(1, 2).reshape(batch.batch_size, -1)
+                edge_index = edge_index.to(device=self.device)
 
-                v_true = v_true.to(device=self.device, dtype=dtype)
-                v_est = self.GNU_model(z)
+                v_est = self.GNU_model(z, edge_index)
 
                 loss = self.criterion(v_est, v_true)
                 agg_val_loss += float(loss.item())
@@ -138,7 +166,7 @@ class GNU_GNN_Trainer:
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-            print(f'Epoch {epoch} - Train Loss: {train_loss:.3f}  |  Val Loss: {val_loss:.3f}')
+            print(f'Epoch {epoch} - Train Loss: {train_loss:.3e}  |  Val Loss: {val_loss:.3e}')
 
         plot_val_loss(train_losses, val_losses)
 
@@ -153,20 +181,20 @@ def train_GNU_GNN_model(config_path):
     device = config.get('device', DEVICE)
     dtype = config.get('dtype', DTYPE)
 
-    train_loader, test_loader, train_dataset, test_dataset, mean, cov, std = load_data(config, num_samples)
+    train_loader, test_loader, train_dataset, test_dataset, slk_bus = load_data(config, num_samples)
 
     model = GNU_Model(**config).to(device=device, dtype=dtype)
+    GNU_Model.slk_bus = slk_bus
 
     ckpt_path = f"./models/{config.get('ckpt_name')}"
     if os.path.exists(ckpt_path):
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
-    trainer = GNU_GNN_Trainer(model, (train_loader, test_loader, train_dataset, mean, cov, std),
+    trainer = GNU_GNN_Trainer(model, (train_loader, test_loader, train_dataset),
                               ckpt_path=ckpt_path, device=device, dtype=dtype)
     trainer.train()
 
 
 if __name__ == "__main__":
-    for config_name in os.listdir("../configs"):
-        config_pth = f'./configs/{config_name}'
-        train_GNU_GNN_model(config_pth)
+    config_pth = f'../configs/GNU_GNN_config.json'
+    train_GNU_GNN_model(config_pth)
