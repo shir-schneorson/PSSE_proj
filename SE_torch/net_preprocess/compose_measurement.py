@@ -15,13 +15,13 @@ class Pi:
         Ybus = Ybu[self.bus]
         idx2 = torch.nonzero(Ybus).T
         self.ii, _ = idx2
-        self.Gij = torch.real(Ybus[idx2[0], idx2[1]])
-        self.Bij = torch.imag(Ybus[idx2[0], idx2[1]])
+        self.Gij = torch.real(Ybus[idx2[0], idx2[1]]).to(dtype=torch.get_default_dtype())
+        self.Bij = torch.imag(Ybus[idx2[0], idx2[1]]).to(dtype=torch.get_default_dtype())
 
         self.Yii = Yii[self.bus, self.bus]
         self.Ybu = Ybu
-        self.Gii = torch.real(Ybu[self.bus, self.bus])
-        self.Bii = torch.imag(Ybu[self.bus, self.bus])
+        self.Gii = torch.real(Ybu[self.bus, self.bus]).to(dtype=torch.get_default_dtype())
+        self.Bii = torch.imag(Ybu[self.bus, self.bus]).to(dtype=torch.get_default_dtype())
 
         self.ij = self.i != self.j
 
@@ -45,13 +45,13 @@ class Qi:
         Ybus = Ybu[self.bus]
         idx2 = torch.nonzero(Ybus).T
         self.ii, _ = idx2
-        self.Gij = torch.real(Ybus[idx2[0], idx2[1]])
-        self.Bij = torch.imag(Ybus[idx2[0], idx2[1]])
+        self.Gij = torch.real(Ybus[idx2[0], idx2[1]]).to(dtype=torch.get_default_dtype())
+        self.Bij = torch.imag(Ybus[idx2[0], idx2[1]]).to(dtype=torch.get_default_dtype())
 
         self.Yii = Yii[self.bus, self.bus]
         self.Ybu = Ybu
-        self.Gii = torch.real(Ybu[self.bus, self.bus])
-        self.Bii = torch.imag(Ybu[self.bus, self.bus])
+        self.Gii = torch.real(Ybu[self.bus, self.bus]).to(dtype=torch.get_default_dtype())
+        self.Bii = torch.imag(Ybu[self.bus, self.bus]).to(dtype=torch.get_default_dtype())
 
         self.ij = self.i != self.j
 
@@ -71,13 +71,13 @@ class Cm:
 
         self.A = (bra.tij[self.idx] ** 4 *
                   (bra.gij[self.idx] ** 2 +
-                   (bra.bij[self.idx] + bra.bsi[self.idx]) ** 2))
+                   (bra.bij[self.idx] + bra.bsi[self.idx]) ** 2)).to(dtype=torch.get_default_dtype())
         self.B = (bra.pij[self.idx] ** 2 *
-                  (bra.gij[self.idx] ** 2 + bra.bij[self.idx] ** 2))
+                  (bra.gij[self.idx] ** 2 + bra.bij[self.idx] ** 2)).to(dtype=torch.get_default_dtype())
         self.C = (bra.tij[self.idx] ** 2 * bra.pij[self.idx] *
                   (bra.gij[self.idx] ** 2 + bra.bij[self.idx] *
-                   (bra.bij[self.idx] + bra.bsi[self.idx])))
-        self.D = bra.tij[self.idx] ** 2 * bra.pij[self.idx] * bra.gij[self.idx] * bra.bsi[self.idx]
+                   (bra.bij[self.idx] + bra.bsi[self.idx]))).to(dtype=torch.get_default_dtype())
+        self.D = (bra.tij[self.idx] ** 2 * bra.pij[self.idx] * bra.gij[self.idx] * bra.bsi[self.idx]).to(dtype=torch.get_default_dtype())
         # self.A = torch.tensor(self.A)
         # self.B = torch.tensor(self.B)
         # self.C = torch.tensor(self.C)
@@ -101,9 +101,9 @@ class Pf:
 
         self.yij = bra.yij[self.idx]
         self.ysi = bra.ysi[self.idx]
-        self.gij = bra.gij[self.idx]
-        self.bij = bra.bij[self.idx]
-        self.tgij = bra.tij[self.idx] ** 2 * self.gij
+        self.gij = bra.gij[self.idx].to(dtype=torch.get_default_dtype())
+        self.bij = bra.bij[self.idx].to(dtype=torch.get_default_dtype())
+        self.tgij = (bra.tij[self.idx] ** 2 * self.gij).to(dtype=torch.get_default_dtype())
         self.pij = bra.pij[self.idx]
         self.fij = bra.fij[self.idx]
 
@@ -121,10 +121,10 @@ class Qf:
 
         self.yij = bra.yij[self.idx]
         self.ysi = bra.ysi[self.idx]
-        self.gij = bra.gij[self.idx]
-        self.bij = bra.bij[self.idx]
-        self.bsi = bra.bsi[self.idx]
-        self.tbij = bra.tij[self.idx] ** 2 * (self.bij + self.bsi)
+        self.gij = bra.gij[self.idx].to(dtype=torch.get_default_dtype())
+        self.bij = bra.bij[self.idx].to(dtype=torch.get_default_dtype())
+        self.bsi = bra.bsi[self.idx].to(dtype=torch.get_default_dtype())
+        self.tbij = (bra.tij[self.idx] ** 2 * (self.bij + self.bsi)).to(dtype=torch.get_default_dtype())
         self.pij = bra.pij[self.idx]
         self.fij = bra.fij[self.idx]
 

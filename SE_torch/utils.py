@@ -30,8 +30,8 @@ def square_mag(z: torch.Tensor, var: torch.Tensor, agg_meas_idx: dict[str, torch
 
 
 def RMSE(T_true: torch.Tensor, V_true: torch.Tensor, T_est: torch.Tensor, V_est: torch.Tensor):
-    u_true = V_true.to(dtype=torch.float64) * torch.exp(1j * T_true.to(torch.float64))
-    u_est  = V_est.to(dtype=torch.float64)  * torch.exp(1j * T_est.to(torch.float64))
+    u_true = V_true.to(dtype=torch.get_default_dtype()) * torch.exp(1j * T_true.to(torch.get_default_dtype()))
+    u_est  = V_est.to(dtype=torch.get_default_dtype())  * torch.exp(1j * T_est.to(torch.get_default_dtype()))
 
     num = torch.linalg.norm(u_est - u_true)
     den = torch.linalg.norm(u_true) + 1e-12
@@ -39,13 +39,19 @@ def RMSE(T_true: torch.Tensor, V_true: torch.Tensor, T_est: torch.Tensor, V_est:
     err = (num / den).real
     return err
 
+def RMSE_polar(T_true: torch.Tensor, V_true: torch.Tensor, T_est: torch.Tensor, V_est: torch.Tensor):
+    err_T = T_true - T_est
+    err_V = V_true - V_est
+    err = torch.linalg.norm(torch.concat([err_T, err_V]))
+    return err
+
 
 def init_start_point(sys, data=None, how='flat',
                      flat_init=(0, 1), random_init=(0.3, 1, 1e-2)):
     if how == 'flat':
-        T = torch.deg2rad(torch.full((sys.nb,), flat_init[0], dtype=torch.float64))
+        T = torch.deg2rad(torch.full((sys.nb,), flat_init[0], dtype=torch.get_default_dtype()))
         T[sys.slk_bus[0]] = sys.slk_bus[1]
-        V = torch.full((sys.nb,), flat_init[1], dtype=torch.float64)
+        V = torch.full((sys.nb,), flat_init[1], dtype=torch.get_default_dtype())
 
     elif how == 'exact':
         pmu = data['data'].get('pmu')

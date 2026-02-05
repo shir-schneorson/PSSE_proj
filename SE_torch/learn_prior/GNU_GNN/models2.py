@@ -29,73 +29,69 @@ class GNU_Model(nn.Module):
 
         self.device = kwargs.get('device', 'cpu')
         self.dtype = kwargs.get('dtype', torch.float32)
-
-        self.GNN = GNN_Model(self.k_hops, self.hidden_layers, self.step_dim, self.device, self.dtype).to(self.device)
-        self.A = nn.Linear(self.z_dim + self.step_dim,
-                           self.v_dim, bias=False).to(device=self.device, dtype=self.dtype)
-        self.B = nn.Linear(self.v_dim + self.step_dim,
-                           self.v_dim, bias=False).to(device=self.device, dtype=self.dtype)
-        self.b = nn.Linear(self.step_dim,
-                           self.v_dim, bias=False).to(device=self.device, dtype=self.dtype)
-        self.step_emb = nn.Embedding(NUM_STEPS, self.step_dim).to(device=self.device, dtype=self.dtype)
+        self.GNN = nn.ModuleList([
+                        GNN_Model(self.k_hops, self.hidden_layers, self.device, self.dtype)
+                        for _ in range(self.num_steps)
+                    ])
+        self.A = nn.ModuleList([
+            nn.Linear(self.z_dim, self.v_dim, bias=False)
+            for _ in range(self.num_steps)
+        ])
+        self.B = nn.ModuleList([
+            nn.Linear(self.v_dim, self.v_dim, bias=False)
+            for _ in range(self.num_steps)
+        ])
+        self.b = nn.ParameterList([
+            nn.Parameter(torch.zeros(self.v_dim))
+            for _ in range(self.num_steps)
+        ])
 
     def forward(self, z, edge_index):
         bs = z.size(0)
-        v0 = torch.zeros(bs, self.v_dim).to(device=self.device, dtype=self.dtype)
+        v0 = torch.cat([torch.zeros(bs, self.v_dim // 2),
+                        torch.ones(bs, self.v_dim // 2)], dim=1).to(device=self.device, dtype=self.dtype)
         v0.requires_grad = True
         v = [v0]
         for i in range(self.num_steps):
-            step_idx = torch.tensor(i, device=self.device)
             v_i = v[i]
             X_i_0 = v_i.view(bs, 2, -1).transpose(1, 2).reshape(-1, 2)
-            X_i_l = self.GNN(X_i_0, edge_index, step_idx)
+            X_i_l = self.GNN[i](X_i_0, edge_index)
             u_i = X_i_l.view(bs, -1, 2).transpose(1, 2).reshape(bs, -1)
-
-            s_i = self.step_emb(step_idx)
-            s_i = s_i.unsqueeze(0).expand(bs, -1)
-
-            z_ind = torch.cat([z, s_i], dim=-1)
-            u_i_ind = torch.cat([u_i, s_i], dim=-1)
-
-            v_ip1 = self.A(z_ind) + self.B(u_i_ind) + self.b(s_i)
+            v_ip1 = self.A[i](z) + self.B[i](u_i) + self.b[i]
             if self.slk_bus is not None:
-                v_ip1[:, self.slk_bus[0]] = self.slk_bus[1]
+                idx = torch.tensor([int(self.slk_bus[0])], device=v_ip1.device)
+                val = torch.tensor([float(self.slk_bus[1])], device=v_ip1.device, dtype=v_ip1.dtype)
+                v_ip1 = v_ip1.index_copy(1, idx, val.expand(bs, 1))
             v.append(v_ip1)
         v_last = v[-1]
-        return v_last
+        return v_last, v
 
     def optimize(self, *args):
         z = args[1].to(device=self.device, dtype=self.dtype)
         z = z.view(1, -1)
         nb = args[5]
         bs = z.size(0)
-        x0 = torch.zeros(bs, self.v_dim).to(device=self.device, dtype=self.dtype)
+        x0 = torch.cat([torch.zeros(bs, self.v_dim // 2), torch.ones(bs, self.v_dim // 2)], dim=1).to(
+            device=self.device, dtype=self.dtype)
         all_x = [x0.clone().detach().flatten()]
         pbar = tqdm(range(self.num_steps), desc="Optimizing GNU GNN", leave=True)
         for i in pbar:
-            step_idx = torch.tensor(i, device=self.device)
             x_i = all_x[i]
             X_i_0 = x_i.view(bs, 2, -1).transpose(1, 2).reshape(-1, 2)
-            X_i_l = self.GNN(X_i_0, self.edge_index, step_idx)
+            X_i_l = self.GNN[i](X_i_0, self.edge_index)
             u_i = X_i_l.view(bs, -1, 2).transpose(1, 2).reshape(bs, -1)
-
-            s_i = self.step_emb(step_idx)
-            s_i = s_i.unsqueeze(0).expand(bs, -1)
-
-            z_ind = torch.cat([z, s_i], dim=-1)
-            u_i_ind = torch.cat([u_i, s_i], dim=-1)
-            x_ip1 = self.A(z_ind) + self.B(u_i_ind) + self.b(s_i)
+            x_ip1 = self.A[i](z) + self.B[i](u_i) + self.b[i]
             if self.slk_bus is not None:
                 x_ip1[:, self.slk_bus[0]] = self.slk_bus[1]
-
             all_x.append(x_ip1.clone().detach().flatten())
+
         x_last = all_x[-1].flatten()
         T, V = x_last[:nb], x_last[nb:]
         return x_last, T, V, True, self.num_steps, torch.nan, all_x
 
 
 class GNN_Model(nn.Module):
-    def __init__(self, k_hops=K_HOPS, hidden_layers=HIDDEN_LAYERS, step_dim=STEP_DIM, device='cpu', dtype=torch.float32):
+    def __init__(self, k_hops=K_HOPS, hidden_layers=HIDDEN_LAYERS, device='cpu', dtype=torch.float32):
         super(GNN_Model, self).__init__()
         self.device = device
         self.dtype = dtype
@@ -103,27 +99,18 @@ class GNN_Model(nn.Module):
         self.out_channels = 2
         self.k_hops = k_hops
         self.hidden_layers = hidden_layers
-        self.step_dim = step_dim
-        self.step_emb = nn.Embedding(NUM_STEPS, self.step_dim).to(device=self.device, dtype=self.dtype)
 
         p = list(range(self.k_hops))
         self.mix_hops_layers = nn.ModuleList([
-            tg.nn.MixHopConv(in_channels=self.in_channels + self.step_dim,
-                             out_channels=self.out_channels,
-                             powers=p).to(device=self.device, dtype=self.dtype)
+            tg.nn.MixHopConv(in_channels=self.in_channels, out_channels=self.out_channels, powers=p)
+            for _ in range(self.hidden_layers)
         ])
-        for i in range(self.hidden_layers - 1):
-            self.mix_hops_layers.append(
-                tg.nn.MixHopConv(in_channels=self.out_channels,
-                                 out_channels=self.out_channels,
-                                 powers=p)).to(device=self.device, dtype=self.dtype)
+        self.norms = nn.ModuleList([nn.LayerNorm(self.out_channels) for _ in range(self.hidden_layers)])
 
-    def forward(self, X, edge_index, step_index):
-        s = self.step_emb(step_index)
-        s = s.unsqueeze(0).expand(X.size(0), -1)
-        X = torch.cat([X, s], dim=-1)
+    def forward(self, X, edge_index):
         for i in range(self.hidden_layers):
             X = self.mix_hops_layers[i](X, edge_index)
             X = X.view(-1, self.k_hops, self.out_channels).sum(dim=1)
-            X = F.relu(X)
+            X = self.norms[i](X)
+            X = F.leaky_relu(X, 0.01)
         return X

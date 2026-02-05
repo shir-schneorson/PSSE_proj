@@ -178,6 +178,11 @@ SE_np/data_parser/data
 SE_np/explore_prior/gaussian_prior/*
 SE_torch/learn_prior/datasets/*
 SE_torch/learn_prior/configs/*
+SE_torch/learn_prior/configs_cart/*
 SE_torch/learn_prior/plot/*
 SE_torch/learn_prior/NF/models/*
+SE_torch/learn_prior/DPS/models/*
+SE_torch/learn_prior/GNU_GNN/models/*
+SE_torch/learn_prior/VAE/models/*
 SE_torch/analysis/configs/*
+SE_torch/analysis/results/*

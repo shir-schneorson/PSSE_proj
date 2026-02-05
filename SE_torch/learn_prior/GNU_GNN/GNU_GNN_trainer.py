@@ -3,29 +3,20 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from numpy import dtype
-from torch.distributions.multivariate_normal import MultivariateNormal
 
 import matplotlib.pyplot as plt
-from torch_geometric import edge_index
 from tqdm.auto import tqdm
-from SE_torch.learn_prior.GNU_GNN.models import GNU_Model
+from SE_torch.learn_prior.GNU_GNN.models2 import GNU_Model
 from SE_torch.learn_prior.GNU_GNN.load_data import load_data
 
-# DEVICE = (
-#     torch.device("mps") if torch.backends.mps.is_available()
-#     else torch.device("cuda") if torch.cuda.is_available()
-#     else torch.device("cpu")
-# )
-
-DEVICE = "cpu"
+DEVICE = "mps"
 DTYPE = torch.float32
 torch.set_default_dtype(DTYPE)
 
-NUM_EPOCHS = 20
+NUM_EPOCHS = 30
 NUM_STEPS = 10
 
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-3
 PSI_STEP_SIZE = 1e-2
 
 NUM_DATA_POINTS = 250000
@@ -62,10 +53,15 @@ class Psi(nn.Module):
         self.loss = nn.MSELoss()
 
     def forward(self, model, z, v_true, edge_index):
-        zeta = z.clone().requires_grad_()
-        psi_loss = self.loss(model(zeta, edge_index), v_true) + self.gamma * (self.rho - self.c(z, zeta))
-        grad_psi_zeta = torch.autograd.grad(psi_loss, zeta)[0]
-        return z + self.step_size * grad_psi_zeta
+        zeta = z.clone().detach()
+        v = v_true.clone().detach()
+        v.requires_grad = False
+        zeta.requires_grad = True
+        v_est, _ = model(zeta, edge_index)
+        psi_loss = self.loss(v_est, v) + self.gamma * (self.rho - self.c(z, zeta))
+        psi_loss.backward()
+        zeta = zeta + self.step_size * zeta.grad
+        return zeta
 
 
 class RMSE(nn.Module):
@@ -73,6 +69,8 @@ class RMSE(nn.Module):
         super(RMSE, self).__init__()
 
     def forward(self, v_est, v_true):
+        v_est = v_est.clone().detach().to('cpu')
+        v_true = v_true.clone().detach().to('cpu')
         half_dim = v_true.shape[1] // 2
         X_true = v_true.view(-1, 2, half_dim).transpose(1, 2).reshape(-1, 2)
         T_true, V_true = X_true[:, 0], X_true[:, 1]
@@ -80,14 +78,14 @@ class RMSE(nn.Module):
         X_est = v_est.view(-1, 2, half_dim).transpose(1, 2).reshape(-1, 2)
         T_est, V_est = X_est[:, 0], X_est[:, 1]
 
-        u_true = V_true * torch.exp(1j * T_true)
-        u_est = V_est * torch.exp(1j * T_est)
+        u_true = (V_true * torch.exp(1j * T_true)).reshape(-1, half_dim)
+        u_est = (V_est * torch.exp(1j * T_est)).reshape(-1, half_dim)
 
         res = u_est - u_true
-        num = torch.sqrt(torch.dot(torch.conj(res), res).sum())
-        den = torch.sqrt(torch.dot(torch.conj(u_true), u_true).sum()) + 1e-12
+        num = torch.norm(res, dim=1)
+        den = torch.norm(u_true, dim=1)
 
-        err = (num / den).real
+        err = (num / den)
         return err
 
 class GNU_GNN_Trainer:
@@ -100,8 +98,8 @@ class GNU_GNN_Trainer:
 
         self.optimizer = optim.Adam(self.GNU_model.parameters(), lr=learning_rate)
         self.psi = Psi().to(device=device, dtype=dtype)
-        self.criterion = RMSE().to(device=device, dtype=dtype)
-
+        self.criterion = torch.nn.MSELoss(reduction='sum').to(device=device, dtype=dtype)
+        self.rmse = RMSE().to(device='cpu', dtype=dtype)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_epochs)
 
         self.num_epochs = num_epochs
@@ -113,23 +111,26 @@ class GNU_GNN_Trainer:
         self.GNU_model.train()
         running_loss = 0.0
         desc = f'{self.GNU_model.__class__.__name__} [Epoch {epoch}] 🟢 Training'
-
-        for batch in tqdm(self.train_loader, desc=desc, colour='green'):
+        pbar = tqdm(self.train_loader, desc=desc, colour='green')
+        for batch in pbar:
             self.optimizer.zero_grad()
             v_true, edge_index, z = batch.x, batch.edge_index, batch.y
+            z = z.view(batch.batch_size, -1, 2)[:, :, 0].squeeze(-1)
             z = z.to(device=self.device, dtype=self.dtype)
-            z = z.view(batch.batch_size, -1)
             v_true = v_true.to(device=self.device, dtype=self.dtype)
             v_true = v_true.view(batch.batch_size, -1, 2).transpose(1, 2).reshape(batch.batch_size, -1)
             edge_index = edge_index.to(device=self.device)
 
             zeta = self.psi(self.GNU_model, z, v_true, edge_index)
-            v_est = self.GNU_model(zeta, edge_index)
+            v_est, _ = self.GNU_model(zeta, edge_index)
 
-            loss = self.criterion(v_est, v_true)
+            loss = (v_est - v_true).pow(2).sum(dim=1).mean()
             loss.backward()
             self.optimizer.step()
             running_loss += float(loss.item())
+            with torch.no_grad():
+                rmse = self.rmse(v_est, v_true)
+                pbar.set_postfix(loss=loss.item(), rmse_min=rmse.min().item(), rmse_max=rmse.max().item())
 
         self.scheduler.step()
 
@@ -141,18 +142,21 @@ class GNU_GNN_Trainer:
         desc = f'{self.GNU_model.__class__.__name__} [Epoch {epoch}] 🔵 Validating'
 
         with torch.no_grad():
-            for batch in tqdm(self.test_loader, desc=desc, colour='blue'):
+            pbar = tqdm(self.test_loader, desc=desc, colour='blue')
+            for batch in pbar:
                 v_true, edge_index, z = batch.x, batch.edge_index, batch.y
+                z = z.view(batch.batch_size, -1, 2)[:, :, 0].squeeze(-1)
                 z = z.to(device=self.device, dtype=self.dtype)
-                z = z.view(batch.batch_size, -1)
                 v_true = v_true.to(device=self.device, dtype=self.dtype)
                 v_true = v_true.view(batch.batch_size, -1, 2).transpose(1, 2).reshape(batch.batch_size, -1)
                 edge_index = edge_index.to(device=self.device)
 
-                v_est = self.GNU_model(z, edge_index)
+                v_est, all_v = self.GNU_model(z, edge_index)
 
-                loss = self.criterion(v_est, v_true)
+                loss = (v_est - v_true).pow(2).sum(dim=1).mean()
                 agg_val_loss += float(loss.item())
+                rmse = self.rmse(v_est, v_true)
+                pbar.set_postfix(loss=loss.item(), rmse_min=rmse.min().item(), rmse_max=rmse.max().item())
 
         return agg_val_loss / max(1, len(self.test_loader))
 
@@ -181,10 +185,9 @@ def train_GNU_GNN_model(config_path):
     device = config.get('device', DEVICE)
     dtype = config.get('dtype', DTYPE)
 
-    train_loader, test_loader, train_dataset, test_dataset, slk_bus = load_data(config, num_samples)
+    train_loader, test_loader, train_dataset, test_dataset, config = load_data(config, num_samples)
 
     model = GNU_Model(**config).to(device=device, dtype=dtype)
-    GNU_Model.slk_bus = slk_bus
 
     ckpt_path = f"./models/{config.get('ckpt_name')}"
     if os.path.exists(ckpt_path):
@@ -196,5 +199,8 @@ def train_GNU_GNN_model(config_path):
 
 
 if __name__ == "__main__":
-    config_pth = f'../configs/GNU_GNN_config.json'
-    train_GNU_GNN_model(config_pth)
+    for config_name in os.listdir("../configs"):
+        if config_name.startswith("GNU_GNN_obs"):
+            print(config_name)
+            config_pth = f'../configs/{config_name}'
+            train_GNU_GNN_model(config_pth)

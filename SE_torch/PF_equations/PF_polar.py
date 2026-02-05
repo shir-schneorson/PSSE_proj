@@ -149,12 +149,12 @@ def jc(V, T, c, nb):
     return Jc
 
 def fv(V, vm, nb):
-    Fv = V[vm.i]
+    Fv = V[vm.i].pow(2)
 
     return Fv
 
 def jv(V, vm, nb):
-    V_V = torch.sparse_coo_tensor(torch.vstack([torch.arange(vm.N), vm.i]), torch.ones(vm.N), (vm.N, nb))
+    V_V = torch.sparse_coo_tensor(torch.vstack([torch.arange(vm.N), vm.i]), 2 * V[vm.i], (vm.N, nb))
     V_T = torch.zeros((vm.N, nb))
 
     Jv = torch.cat([V_T, V_V.to_dense()], dim=1)
@@ -307,9 +307,14 @@ class H_AC:
         self.vm = Vm(Vm_idx, sys.bus)
         self.nb = sys.nb
 
-    def estimate(self, T, V):
-        V = V.flatten()
-        T = T.flatten()
+    def estimate(self, *args):
+        if len(args) == 1:
+            x = args[0]
+            nb = len(x) // 2
+            T, V = x[:nb], x[nb:]
+        else:
+            T, V = args[0].flatten(), args[1].flatten()
+
         Ff = ff(V, T, self.pf, self.qf, self.nb)
         Fi = fi(V, T, self.pi, self.qi, self.nb)
         Fc = fc(V, T, self.cm, self.nb)
@@ -317,11 +322,16 @@ class H_AC:
 
         f = torch.cat([Ff, Fc, Fi, Fv])
 
-        return f
+        return f.to(dtype=torch.get_default_dtype())
 
-    def jacobian(self, T, V):
-        V = V.flatten()
-        T = T.flatten()
+    def jacobian(self, *args):
+        if len(args) == 1:
+            x = args[0]
+            nb = len(x) // 2
+            T, V = x[:nb], x[nb:]
+        else:
+            T, V = args[0].flatten(), args[1].flatten()
+
         Jf = jf(V, T, self.pf, self.qf, self.nb)
         Ji = ji(V, T, self.pi, self.qi, self.nb)
         Jc = jc(V, T, self.cm, self.nb)
@@ -329,4 +339,4 @@ class H_AC:
 
         J = torch.cat([Jf, Jc, Ji, Jv])
 
-        return J
+        return J.to(dtype=torch.get_default_dtype())
